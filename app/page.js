@@ -15,14 +15,14 @@ const services = [
 const artists = [
   {
     name: "Autumn Fawcett",
-    image: "/artist-autumn.jpg",
+    image: "/artist-autumn.png",
     specialty:
       "Custom tattoo artist focused on high-impact work, strong flow on the body, and clean, intentional composition.",
     tags: ["Custom work", "Large-scale", "Bold design"],
   },
   {
     name: "Ben Fawcett",
-    image: "/artist-matt.jpg",
+    image: "/artist-ben.png",
     specialty:
       "Artist profile section for realism, subject matter, preferred projects, and booking focus. Replace this with his real bio and strongest niche.",
     tags: ["Realism", "Black & grey", "Large projects"],
@@ -167,7 +167,7 @@ export default function HomePage() {
 
           <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/5">
             <img
-              src="/hero-studio.jpg"
+              src="/hero-studio.png"
               alt="Fawcett Tattoos studio"
               className="h-[420px] w-full object-cover md:h-[560px]"
             />
