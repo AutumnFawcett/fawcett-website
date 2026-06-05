@@ -1,91 +1,61 @@
-const CONTACT_EMAIL = "info@fawcetttattoos.com";
-const CONTACT_PHONE = "+15874874985";
+const CONTACT_EMAIL =
+  "mailto:info@fawcetttattoos.com?subject=Tattoo Consultation Request&body=Name:%0APhone Number:%0ATattoo Idea:%0APlacement:%0AApproximate Size:%0ABlack and Grey or Color:%0AReference Images:%0APreferred Artist:%0A";
+const CONTACT_EMAIL_TEXT = "info@fawcetttattoos.com";
+const CONTACT_PHONE = "15874874985";
+const CONTACT_PHONE_DISPLAY = "(587) 487-4985";
 const INSTAGRAM_URL = "https://instagram.com/fawcetttattoos";
-const POLICIES_URL = "/policies";
-
-const services = [
-  "Custom Tattoos",
-  "Large-Scale Pieces",
-  "Black & Grey",
-  "Color Work",
-  "Consultations",
-  "Touch-Ups",
-];
 
 const artists = [
   {
     name: "Autumn Fawcett",
     image: "/artist-autumn.png",
     specialty:
-      "Custom tattoo artist focused on high-impact work, strong flow on the body, and clean, intentional composition.",
+      "Custom tattoo artist focused on bold composition, strong body flow, and high-impact pieces built to heal clean and hold up over time.",
     tags: ["Custom work", "Large-scale", "Bold design"],
   },
   {
     name: "Ben Fawcett",
     image: "/artist-ben.png",
     specialty:
-      "Artist profile section for realism, subject matter, preferred projects, and booking focus. Replace this with his real bio and strongest niche.",
+      "Tattoo artist focused on realism-driven custom work, strong contrast, and large-scale projects designed for flow, readability, and long-term impact.",
     tags: ["Realism", "Black & grey", "Large projects"],
   },
 ];
 
 const portfolioItems = [
-  { image: "/tattoo-1.png", title: "Large-Scale Black & Grey", type: "Sleeve Work" },
+  { image: "/tattoo-1.png", title: "Black & Grey Sleeve", type: "Large-Scale Work" },
   { image: "/tattoo-2.png", title: "Custom Composition", type: "Custom Project" },
   { image: "/tattoo-3.png", title: "Healed Detail", type: "Healed Work" },
-  { image: "/tattoo-4.png", title: "Bold Placement Flow", type: "Body Flow" },
-  { image: "/tattoo-5.png", title: "High Contrast Design", type: "Fresh Work" },
-  { image: "/tattoo-6.png", title: "Statement Piece", type: "Featured Work" },
+  { image: "/tattoo-4.png", title: "Strong Placement Flow", type: "Body Flow" },
+  { image: "/tattoo-5.png", title: "High Contrast Piece", type: "Fresh Work" },
+  { image: "/tattoo-6.png", title: "Featured Tattoo", type: "Portfolio Select" },
 ];
 
 const faqs = [
   {
     question: "How do I book?",
     answer:
-      "Start with a consultation request by email or through the booking section below. Include your idea, placement, approximate size, style direction, and reference images so we can review your project properly.",
+      "Start with a consultation request by email, phone, or direct message. Include your idea, placement, approximate size, preferred style, and any reference images so we can review your project properly.",
   },
   {
     question: "Do you require a deposit?",
     answer:
-      "Yes. A non-refundable deposit is required to secure an appointment and goes toward the tattoo session, subject to studio booking policies.",
+      "Yes. A non-refundable, non-transferable booking fee is required to secure all tattoo and PMU appointments.",
   },
   {
-    question: "What should I include in my booking request?",
+    question: "What should I include in my inquiry?",
     answer:
-      "Send the concept, placement, size in inches, black and grey or color preference, any reference images, and whether you are open to artist direction.",
+      "Please include the concept, body placement, approximate size, black and grey or color preference, and 3–6 reference images if available.",
   },
   {
-    question: "What is the reschedule policy?",
+    question: "Do you offer consultations?",
     answer:
-      "Reschedules should be requested with as much notice as possible. Last-minute cancellations or no-shows may result in deposit loss according to studio policy.",
-  },
-  {
-    question: "How do I prepare for my appointment?",
-    answer:
-      "Eat beforehand, stay hydrated, avoid alcohol, arrive rested, and wear clothing that gives easy access to the tattoo area.",
+      "Yes. We offer virtual and in-person consultations depending on the needs of the project.",
   },
   {
     question: "Do you provide aftercare instructions?",
     answer:
-      "Yes. Aftercare instructions are provided after your appointment so your tattoo heals properly and holds the best result possible.",
-  },
-];
-
-const bookingSteps = [
-  {
-    number: "01",
-    title: "Send your idea",
-    text: "Tell us the concept, placement, size, style, and attach reference images.",
-  },
-  {
-    number: "02",
-    title: "Review and consultation",
-    text: "We review the project, discuss fit, and confirm the right artist and appointment path.",
-  },
-  {
-    number: "03",
-    title: "Secure with deposit",
-    text: "Once approved, your appointment is locked in with a deposit under studio policy.",
+      "Yes. Aftercare guidance is provided after your appointment, and we strongly recommend following studio aftercare instructions closely for the best healing results.",
   },
 ];
 
@@ -93,29 +63,52 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-black text-white">
       <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-8">
-          <a href="#top" className="text-base font-black tracking-[0.16em] md:text-lg">
-            FAWCETT TATTOOS
-          </a>
+        <div className="mx-auto max-w-7xl px-5 py-4 md:px-8">
+          <div className="flex items-center justify-between">
+            <a href="#top" className="text-base font-black tracking-[0.16em] md:text-lg">
+              FAWCETT TATTOOS
+            </a>
 
-          <nav className="hidden items-center gap-6 md:flex">
-            <a href="#artists" className="text-sm text-white/70 transition hover:text-white">
+            <nav className="hidden items-center gap-6 md:flex">
+              <a href="#artists" className="text-sm text-white/70 transition hover:text-white">
+                Artists
+              </a>
+              <a href="#portfolio" className="text-sm text-white/70 transition hover:text-white">
+                Portfolio
+              </a>
+              <a href="/pricing" className="text-sm text-white/70 transition hover:text-white">
+                Pricing
+              </a>
+              <a href="/policies" className="text-sm text-white/70 transition hover:text-white">
+                Policies
+              </a>
+              <a href="/aftercare" className="text-sm text-white/70 transition hover:text-white">
+                Aftercare
+              </a>
+              <a
+                href={CONTACT_EMAIL}
+                className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white hover:text-black"
+              >
+                Contact
+              </a>
+            </nav>
+          </div>
+
+          <nav className="mt-3 flex flex-wrap gap-4 text-sm md:hidden">
+            <a href="#artists" className="text-white/70 hover:text-white">
               Artists
             </a>
-            <a href="#portfolio" className="text-sm text-white/70 transition hover:text-white">
+            <a href="#portfolio" className="text-white/70 hover:text-white">
               Portfolio
             </a>
-            <a href="#booking" className="text-sm text-white/70 transition hover:text-white">
-              Booking
+            <a href="/pricing" className="text-white/70 hover:text-white">
+              Pricing
             </a>
-            <a href="#faq" className="text-sm text-white/70 transition hover:text-white">
-              FAQ
+            <a href="/policies" className="text-white/70 hover:text-white">
+              Policies
             </a>
-            <a
-              href={`mailto:${CONTACT_EMAIL}?subject=Tattoo Consultation Request`}
-              className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white hover:text-black"
-            >
-              Contact
+            <a href="/aftercare" className="text-white/70 hover:text-white">
+              Aftercare
             </a>
           </nav>
         </div>
@@ -128,18 +121,18 @@ export default function HomePage() {
               Edmonton Tattoo Studio
             </p>
 
-            <h1 className="max-w-4xl text-[3.3rem] font-black leading-[0.95] tracking-tight sm:text-[4.5rem] md:text-7xl">
-              Fawcett Tattoos
-              <span className="mt-1 block text-white/65">& Art Studio</span>
+            <h1 className="max-w-4xl text-[3.1rem] font-black leading-[0.95] tracking-tight sm:text-[4.4rem] md:text-7xl">
+              Custom tattoos with bold design, strong flow, and clean execution.
             </h1>
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-white/70 md:text-xl">
-              Custom tattooing, strong design, clean execution, and studio work built to hold up over time.
+              Fawcett Tattoos & Art Studio creates custom black and grey, color,
+              realism-driven, and large-scale tattoo work in Edmonton, Alberta.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href={`mailto:${CONTACT_EMAIL}?subject=Tattoo Consultation Request`}
+                href={CONTACT_EMAIL}
                 className="inline-flex items-center justify-center rounded-full bg-white px-6 py-4 text-sm font-bold text-black transition hover:scale-[1.01]"
               >
                 Book a Consultation
@@ -154,9 +147,15 @@ export default function HomePage() {
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-white/45">
-              <span className="rounded-full border border-white/10 px-3 py-2">Custom Work</span>
-              <span className="rounded-full border border-white/10 px-3 py-2">Consultations</span>
-              <span className="rounded-full border border-white/10 px-3 py-2">Edmonton, Alberta</span>
+              <span className="rounded-full border border-white/10 px-3 py-2">
+                Custom Consultations
+              </span>
+              <span className="rounded-full border border-white/10 px-3 py-2">
+                Large-Scale Projects Welcome
+              </span>
+              <span className="rounded-full border border-white/10 px-3 py-2">
+                Edmonton, Alberta
+              </span>
             </div>
 
             <div className="mt-10 space-y-2 text-sm leading-7 text-white/55 md:text-base">
@@ -179,38 +178,27 @@ export default function HomePage() {
       <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
         <div className="grid gap-4 md:grid-cols-3">
           {[
-            ["Custom-first approach", "Projects are built around idea, placement, and long-term body flow."],
-            ["Professional process", "Consultation, deposit, scheduling, and expectations are clearly handled."],
-            ["Portfolio-driven", "The work leads. Strong imagery and clear specialty sell better than fluff."],
+            [
+              "Custom-first approach",
+              "Every project is built around idea, placement, and long-term body flow.",
+            ],
+            [
+              "Professional booking process",
+              "Consultation, deposit, scheduling, and expectations are handled clearly.",
+            ],
+            [
+              "Portfolio-driven work",
+              "Strong imagery, healed results, and readable design matter more than hype.",
+            ],
           ].map(([title, text]) => (
-            <div key={title} className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-6">
+            <div
+              key={title}
+              className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-6"
+            >
               <h2 className="text-lg font-bold">{title}</h2>
               <p className="mt-3 text-sm leading-7 text-white/65">{text}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section id="services" className="border-y border-white/10 bg-white/[0.02]">
-        <div className="mx-auto max-w-7xl px-5 py-14 md:px-8 md:py-18">
-          <div className="max-w-2xl">
-            <p className="text-xs uppercase tracking-[0.32em] text-white/45">Services</p>
-            <h2 className="mt-3 text-3xl font-black md:text-5xl">Focused, simple, and built to convert</h2>
-            <p className="mt-4 text-base leading-8 text-white/65 md:text-lg">
-              Version one should feel sharp and premium. It does not need to be crowded.
-            </p>
-          </div>
-
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {services.map((service) => (
-              <div
-                key={service}
-                className="rounded-[1.5rem] border border-white/10 bg-black p-5 text-lg font-medium text-white/85"
-              >
-                {service}
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -219,7 +207,8 @@ export default function HomePage() {
           <p className="text-xs uppercase tracking-[0.32em] text-white/45">Artists</p>
           <h2 className="mt-3 text-3xl font-black md:text-5xl">Meet the studio</h2>
           <p className="mt-4 text-base leading-8 text-white/65 md:text-lg">
-            Strong artist positioning builds trust faster than generic bios.
+            We focus on strong design, readable composition, and tattoos built to heal
+            clean and hold up over time.
           </p>
         </div>
 
@@ -260,14 +249,15 @@ export default function HomePage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <p className="text-xs uppercase tracking-[0.32em] text-white/45">Portfolio</p>
-              <h2 className="mt-3 text-3xl font-black md:text-5xl">Show the strongest work first</h2>
+              <h2 className="mt-3 text-3xl font-black md:text-5xl">Recent work</h2>
               <p className="mt-4 text-base leading-8 text-white/65 md:text-lg">
-                Lead with your best pieces. Strong healed work, strong composition, and strong lighting.
+                Our portfolio includes custom work, large-scale projects,
+                realism-driven pieces, and healed results.
               </p>
             </div>
 
             <a
-              href={`mailto:${CONTACT_EMAIL}?subject=Tattoo Consultation Request`}
+              href={CONTACT_EMAIL}
               className="text-sm font-semibold text-white/75 underline underline-offset-4"
             >
               Start a booking request
@@ -278,15 +268,21 @@ export default function HomePage() {
             {portfolioItems.map((item, index) => (
               <article
                 key={item.image}
-                className={`${index === 0 ? "sm:col-span-2" : ""} overflow-hidden rounded-[1.75rem] border border-white/10 bg-black`}
+                className={`${
+                  index === 0 ? "sm:col-span-2" : ""
+                } overflow-hidden rounded-[1.75rem] border border-white/10 bg-black`}
               >
                 <img
                   src={item.image}
                   alt={item.title}
-                  className={`${index === 0 ? "h-[420px]" : "h-[320px]"} w-full object-cover transition duration-300 hover:scale-[1.03]`}
+                  className={`${
+                    index === 0 ? "h-[420px]" : "h-[320px]"
+                  } w-full object-cover transition duration-300 hover:scale-[1.03]`}
                 />
                 <div className="p-5">
-                  <p className="text-xs uppercase tracking-[0.25em] text-white/40">{item.type}</p>
+                  <p className="text-xs uppercase tracking-[0.25em] text-white/40">
+                    {item.type}
+                  </p>
                   <h3 className="mt-2 text-xl font-bold">{item.title}</h3>
                 </div>
               </article>
@@ -299,15 +295,38 @@ export default function HomePage() {
         <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
             <p className="text-xs uppercase tracking-[0.32em] text-white/45">Booking</p>
-            <h2 className="mt-3 text-3xl font-black md:text-5xl">A clear process gets more inquiries</h2>
+            <h2 className="mt-3 text-3xl font-black md:text-5xl">Start your tattoo request</h2>
             <p className="mt-4 text-base leading-8 text-white/65 md:text-lg">
-              Make it obvious what clients need to send and what happens next.
+              Send us your idea, placement, approximate size, style direction, and
+              any reference images. We will review your project and recommend the
+              best appointment path.
             </p>
 
             <div className="mt-8 space-y-4">
-              {bookingSteps.map((step) => (
-                <div key={step.number} className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5">
-                  <p className="text-xs uppercase tracking-[0.28em] text-white/40">{step.number}</p>
+              {[
+                {
+                  number: "01",
+                  title: "Send your idea",
+                  text: "Tell us the concept, placement, size, style, and attach reference images.",
+                },
+                {
+                  number: "02",
+                  title: "Project review",
+                  text: "We review the idea, discuss fit, and recommend the right artist and appointment structure.",
+                },
+                {
+                  number: "03",
+                  title: "Secure your booking",
+                  text: "Once approved, your appointment is secured with a booking fee under studio policy.",
+                },
+              ].map((step) => (
+                <div
+                  key={step.number}
+                  className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-5"
+                >
+                  <p className="text-xs uppercase tracking-[0.28em] text-white/40">
+                    {step.number}
+                  </p>
                   <h3 className="mt-2 text-lg font-bold">{step.title}</h3>
                   <p className="mt-2 text-sm leading-7 text-white/65">{step.text}</p>
                 </div>
@@ -319,14 +338,17 @@ export default function HomePage() {
               <div className="mt-4 space-y-3 text-sm text-white/70">
                 <p>
                   Email:{" "}
-                  <a href={`mailto:${CONTACT_EMAIL}`} className="underline underline-offset-4">
-                    {CONTACT_EMAIL}
+                  <a href={CONTACT_EMAIL} className="underline underline-offset-4">
+                    {CONTACT_EMAIL_TEXT}
                   </a>
                 </p>
                 <p>
                   Phone:{" "}
-                  <a href={`tel:${CONTACT_PHONE}`} className="underline underline-offset-4">
-                    {CONTACT_PHONE}
+                  <a
+                    href={`tel:${CONTACT_PHONE}`}
+                    className="underline underline-offset-4"
+                  >
+                    {CONTACT_PHONE_DISPLAY}
                   </a>
                 </p>
                 <p>
@@ -345,17 +367,28 @@ export default function HomePage() {
           </div>
 
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8">
-            <h3 className="text-2xl font-bold">Start your tattoo request</h3>
+            <h3 className="text-2xl font-bold">What to send with your inquiry</h3>
             <p className="mt-3 text-base leading-8 text-white/65">
-              For now, the fastest working version is direct contact. That beats a fake form every time.
+              The more details you provide, the faster we can review your request.
             </p>
+
+            <div className="mt-8 rounded-[1.5rem] border border-white/10 bg-black p-5">
+              <ul className="space-y-3 text-sm leading-7 text-white/65">
+                <li>Concept or subject matter</li>
+                <li>Placement on the body</li>
+                <li>Approximate size in inches</li>
+                <li>Black and grey or color preference</li>
+                <li>3–6 reference images if you have them</li>
+                <li>Preferred artist if applicable</li>
+              </ul>
+            </div>
 
             <div className="mt-8 grid gap-4">
               <a
-                href={`mailto:${CONTACT_EMAIL}?subject=Tattoo Consultation Request`}
+                href={CONTACT_EMAIL}
                 className="inline-flex items-center justify-center rounded-full bg-white px-6 py-4 text-sm font-bold text-black transition hover:scale-[1.01]"
               >
-                Email to Book
+                Book a Consultation
               </a>
 
               <a
@@ -375,69 +408,41 @@ export default function HomePage() {
               </a>
             </div>
 
-            <div className="mt-8 rounded-[1.5rem] border border-white/10 bg-black p-5">
-              <p className="text-sm font-semibold text-white">What to send with your inquiry</p>
-              <ul className="mt-4 space-y-3 text-sm leading-7 text-white/65">
-                <li>Concept or subject matter</li>
-                <li>Placement on the body</li>
-                <li>Approximate size in inches</li>
-                <li>Black and grey, color, or open to artist direction</li>
-                <li>3–6 reference images if you have them</li>
-              </ul>
-            </div>
-
-            <div className="mt-6">
-              <a
-                href={POLICIES_URL}
-                className="text-sm font-semibold text-white/75 underline underline-offset-4"
-              >
-                View booking policies
+            <div className="mt-6 flex flex-wrap gap-4 text-sm">
+              <a href="/pricing" className="text-white/75 underline underline-offset-4">
+                View pricing
+              </a>
+              <a href="/policies" className="text-white/75 underline underline-offset-4">
+                View policies
+              </a>
+              <a href="/aftercare" className="text-white/75 underline underline-offset-4">
+                View aftercare
               </a>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="border-y border-white/10 bg-white/[0.02]">
+      <section id="faq" className="border-y border-white/10 bg-white/[0.02]">
         <div className="mx-auto max-w-7xl px-5 py-14 md:px-8 md:py-18">
           <div className="max-w-2xl">
-            <p className="text-xs uppercase tracking-[0.32em] text-white/45">Policies</p>
-            <h2 className="mt-3 text-3xl font-black md:text-5xl">Booking info clients actually need</h2>
+            <p className="text-xs uppercase tracking-[0.32em] text-white/45">FAQ</p>
+            <h2 className="mt-3 text-3xl font-black md:text-5xl">Booking basics</h2>
           </div>
 
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {[
-              ["Deposits", "Appointments are secured with a non-refundable deposit applied to the session."],
-              ["Reschedules", "Reschedule notice should be given as early as possible to avoid deposit loss."],
-              ["Prep & aftercare", "Clients receive prep expectations before the appointment and aftercare instructions afterward."],
-            ].map(([title, text]) => (
-              <div key={title} className="rounded-[1.5rem] border border-white/10 bg-black p-6">
-                <h3 className="text-lg font-bold">{title}</h3>
-                <p className="mt-3 text-sm leading-7 text-white/65">{text}</p>
+          <div className="mt-10 grid gap-4">
+            {faqs.map((item) => (
+              <div
+                key={item.question}
+                className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-6 md:p-7"
+              >
+                <h3 className="text-lg font-bold md:text-xl">{item.question}</h3>
+                <p className="mt-3 max-w-4xl text-sm leading-7 text-white/65 md:text-base md:leading-8">
+                  {item.answer}
+                </p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section id="faq" className="mx-auto max-w-7xl px-5 py-14 md:px-8 md:py-18">
-        <div className="max-w-2xl">
-          <p className="text-xs uppercase tracking-[0.32em] text-white/45">FAQ</p>
-          <h2 className="mt-3 text-3xl font-black md:text-5xl">Booking basics</h2>
-        </div>
-
-        <div className="mt-10 grid gap-4">
-          {faqs.map((item) => (
-            <div
-              key={item.question}
-              className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] p-6 md:p-7"
-            >
-              <h3 className="text-lg font-bold md:text-xl">{item.question}</h3>
-              <p className="mt-3 max-w-4xl text-sm leading-7 text-white/65 md:text-base md:leading-8">
-                {item.answer}
-              </p>
-            </div>
-          ))}
         </div>
       </section>
 
@@ -452,11 +457,14 @@ export default function HomePage() {
             <a href="#portfolio" className="hover:text-white">
               Portfolio
             </a>
-            <a href="#booking" className="hover:text-white">
-              Booking
+            <a href="/pricing" className="hover:text-white">
+              Pricing
             </a>
-            <a href={POLICIES_URL} className="hover:text-white">
+            <a href="/policies" className="hover:text-white">
               Policies
+            </a>
+            <a href="/aftercare" className="hover:text-white">
+              Aftercare
             </a>
           </div>
         </div>
