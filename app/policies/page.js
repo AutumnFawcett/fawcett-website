@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function PoliciesPage() {
   const sections = [
     {
@@ -66,9 +68,9 @@ export default function PoliciesPage() {
     <main className="min-h-screen bg-black text-white">
       <section className="border-b border-white/10">
         <div className="mx-auto max-w-5xl px-5 py-14 md:px-8 md:py-20">
-          <a href="/" className="text-sm text-white/60 hover:text-white">
+          <Link href="/" className="text-sm text-white/60 hover:text-white">
             ← Back to Home
-          </a>
+          </Link>
 
           <p className="mt-8 text-xs uppercase tracking-[0.32em] text-white/45">
             Booking & Deposit Policy
@@ -92,7 +94,7 @@ export default function PoliciesPage() {
           {sections.map((section) => (
             <article
               key={section.title}
-              className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 md:p-8"
+              className="rounded-4xl border border-white/10 bg-white/3 p-6 md:p-8"
             >
               <h2 className="text-2xl font-bold">{section.title}</h2>
               <ul className="mt-5 space-y-3 text-white/70">

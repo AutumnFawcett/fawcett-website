@@ -11,14 +11,14 @@ const artists = [
     image: "/artist-autumn.png",
     specialty:
       "Custom tattoo artist focused on bold composition, strong body flow, and high-impact pieces built to heal clean and hold up over time.",
-    tags: ["Custom work", "Large-scale", "Bold design"],
+    tags: ["Realism", "Abstract", "Full Color", "Black & Grey", "Large-scale"],
   },
   {
     name: "Ben Fawcett",
     image: "/artist-ben.png",
     specialty:
       "Tattoo artist focused on realism-driven custom work, strong contrast, and large-scale projects designed for flow, readability, and long-term impact.",
-    tags: ["Realism", "Black & grey", "Large projects"],
+    tags: ["Realism","Portrait", "Black & Grey", "Full Color", "Large projects"],
   },
 ];
 
@@ -62,6 +62,24 @@ const faqs = [
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-black text-white">
+      <section className="credit-marquee" aria-label="Tattoo credit announcement">
+        <a href="/tattoo-project-membership" className="credit-marquee-track">
+          <div className="credit-marquee-content">
+            <span>Interested in Tattoo Credit?</span>
+            <span>Apply for the Tattoo Credit Waitlist</span>
+            <span>Piece • Collector • Sleeve</span>
+            <span>Build tattoo credit toward an approved project</span>
+          </div>
+
+          <div className="credit-marquee-content">
+            <span>Interested in Tattoo Credit?</span>
+            <span>Apply for the Tattoo Credit Waitlist</span>
+            <span>Piece • Collector • Sleeve</span>
+            <span>Build tattoo credit toward an approved project</span>
+          </div>
+        </a>
+      </section>
+
       <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-5 py-4 md:px-8">
           <div className="flex items-center justify-between">
@@ -84,6 +102,9 @@ export default function HomePage() {
               </a>
               <a href="/aftercare" className="text-sm text-white/70 transition hover:text-white">
                 Aftercare
+              </a>
+              <a href="/tattoo-portal" className="text-sm text-white/70 transition hover:text-white">
+                Tattoo Portal
               </a>
               <a
                 href={CONTACT_EMAIL}
@@ -114,10 +135,11 @@ export default function HomePage() {
         </div>
       </header>
 
+
       <section id="top" className="border-b border-white/10">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 py-14 md:px-8 md:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-14">
           <div>
-            <p className="mb-5 text-[11px] uppercase tracking-[0.38em] text-white/45 md:text-xs">
+            <p className="mb-3 text-[11px] uppercase tracking-[0.35em] text-white/45 md:text-xs">
               Edmonton Tattoo Studio
             </p>
 
@@ -132,17 +154,14 @@ export default function HomePage() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href={CONTACT_EMAIL}
-                className="inline-flex items-center justify-center rounded-full bg-white px-6 py-4 text-sm font-bold text-black transition hover:scale-[1.01]"
-              >
-                Book a Consultation
+                  href="/consult"
+                  className="inline-flex items-center justify-center rounded-full bg-white px-6 py-4 text-sm font-bold text-black transition hover:scale-[1.01]"
+                >
+                  Start a Consultation
               </a>
 
-              <a
-                href="#portfolio"
-                className="inline-flex items-center justify-center rounded-full border border-white/15 px-6 py-4 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                View Portfolio
+              <a className="button button-secondary" href="/tattoo-portal">
+              Tattoo Portal Login
               </a>
             </div>
 
@@ -167,13 +186,14 @@ export default function HomePage() {
           <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/5">
             <img
               src="/hero-studio.png"
-              alt="Fawcett Tattoos studio"
+              alt="Fawcett Tattoo studio"
               className="h-[420px] w-full object-cover md:h-[560px]"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
           </div>
         </div>
       </section>
+
 
       <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
         <div className="grid gap-4 md:grid-cols-3">
@@ -201,6 +221,29 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+<section id="membership" className="section membership-preview-section">
+    <div className="membership-preview-card">
+  <div className="section-heading">
+    <p className="eyebrow">INTERESTED IN TATTOO CREDIT?</p>
+  </div>
+
+      <div>
+
+      <p>
+        The Tattoo Project Membership Program is being designed for approved
+        clients who want to build tattoo credit toward a larger custom project
+        over time.
+      </p>
+
+    </div>
+
+    <a className="button button-primary" href="/tattoo-project-membership">
+      Apply for the Waitlist
+    </a>
+  </div>
+</section>
+ 
 
       <section id="artists" className="mx-auto max-w-7xl px-5 py-14 md:px-8 md:py-18">
         <div className="max-w-2xl">
@@ -243,6 +286,8 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+
 
       <section id="portfolio" className="border-y border-white/10 bg-white/[0.02]">
         <div className="mx-auto max-w-7xl px-5 py-14 md:px-8 md:py-18">
