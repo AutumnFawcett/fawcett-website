@@ -204,7 +204,7 @@ export default function TattooPortalLogin() {
                 setStatusMessage("");
               }}
             >
-              Tattoo Portal Login
+              Client Login
             </button>
 
             <button
