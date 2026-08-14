@@ -398,7 +398,7 @@ export default function PricingPage() {
                 </h2>
               </div>
 
-              <p className="shrink-0 rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-6 py-3 text-xl font-black tracking-[-0.04em] text-white shadow-[0_0_30px_rgba(0,0,204,0.3)] md:text-2xl">
+              <p className="shrink-0 rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-6 py-3 text-lg font-black tracking-[-0.04em] text-white shadow-[0_0_30px_rgba(0,0,204,0.3)] md:text-2xl">
                 {section.price}
               </p>
             </div>
@@ -463,7 +463,7 @@ export default function PricingPage() {
                     {session.title}
                   </h3>
 
-                <p className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-6 py-3 text-xl font-black tracking-[-0.04em] text-white shadow-[0_0_30px_rgba(0,0,204,0.3)] md:text-2xl">
+                <p className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-6 py-3 text-l font-black tracking-[-0.04em] text-white shadow-[0_0_30px_rgba(0,0,204,0.3)] md:text-2xl">
                   {session.price}
                 </p>
                 </div>
@@ -511,7 +511,7 @@ export default function PricingPage() {
                 key={tier.title}
                 className="rounded-[1.4rem] border border-white/10 bg-black/35 p-5"
               >
-                <h3 className="text-xl font-black text-white">{tier.title}</h3>
+                <h3 className="text-lg font-black text-white">{tier.title}</h3>
 
                 <div className="mt-5 grid gap-3 text-base font-semibold leading-7 text-white/70">
                   <p>{tier.initial}</p>
