@@ -200,7 +200,7 @@ export default function PricingPage() {
               Request a Consultation
             </a>
             <a className="button button-secondary" href="/tattoo-portal">
-              Tattoo Portal Login
+              Tlattoo Porta Login
             </a>
           </div>
         </div>
