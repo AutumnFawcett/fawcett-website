@@ -1,279 +1,150 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-} from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseClient";
 
-function timestampToMillis(timestamp) {
-  if (!timestamp) return 0;
+const dashboardCards = [
+  {
+    title: "Intake",
+    description:
+      "Review new consults, membership applications, messages, offer responses, and payment requests.",
+    href: "/admin/intake",
+    label: "Start Here",
+  },
+  {
+    title: "Inbox",
+    description:
+      "View Tattoo Portal conversations and reply from General, Ben, or Autumn inboxes.",
+    href: "/admin/inbox",
+    label: "Messages",
+  },
+  {
+    title: "Clients",
+    description:
+      "Open client files, contact details, requests, projects, payments, credit, and notes.",
+    href: "/admin/clients",
+    label: "Client Hub",
+  },
+  {
+    title: "Consult Requests",
+    description:
+      "Review regular tattoo consult requests and create projects from approved requests.",
+    href: "/admin/consults",
+    label: "Consults",
+  },
+  {
+    title: "Membership Applications",
+    description:
+      "Review Tattoo Project Membership waitlist applications and project fit.",
+    href: "/admin/applications",
+    label: "Applications",
+  },
+  {
+    title: "Projects",
+    description:
+      "Manage tattoo projects, project status, artist assignment, estimates, and notes.",
+    href: "/admin/projects",
+    label: "Projects",
+  },
+  {
+    title: "Schedule",
+    description:
+      "Create and manage tattoo appointments connected to client records.",
+    href: "/admin/schedule",
+    label: "Appointments",
+  },
+  {
+    title: "Payments",
+    description:
+      "Record payments, payment methods, In-Studio Credit use, and studio payment notes.",
+    href: "/admin/payments",
+    label: "Payments",
+  },
+  {
+    title: "Credit Ledger",
+    description:
+      "Track client In-Studio Credit additions, use, adjustments, and balance history.",
+    href: "/admin/credit-ledger",
+    label: "Credit",
+  },
+  {
+    title: "Membership Offers",
+    description:
+      "Create standard or custom membership offers for approved clients.",
+    href: "/admin/membership-offers",
+    label: "Offers",
+  },
+  {
+    title: "Offer Responses",
+    description:
+      "Review client responses to membership offers, questions, acceptances, or declines.",
+    href: "/admin/membership-offer-responses",
+    label: "Responses",
+  },
+  {
+    title: "Membership Requests",
+    description:
+      "Review pause, cancel, or membership change requests submitted through the Tattoo Portal.",
+    href: "/admin/membership-requests",
+    label: "Requests",
+  },
+  {
+    title: "Project Timeline",
+    description:
+      "Add client-visible or private project timeline notes and studio updates.",
+    href: "/admin/project-timeline",
+    label: "Timeline",
+  },
+];
 
-  if (timestamp instanceof Date) {
-    return timestamp.getTime();
-  }
+const publicLinks = [
+  {
+    title: "Website Home",
+    href: "/",
+  },
+  {
+    title: "Pricing",
+    href: "/pricing",
+  },
+  {
+    title: "Consult Page",
+    href: "/consult",
+  },
+  {
+    title: "Aftercare",
+    href: "/aftercare",
+  },
+  {
+    title: "Tattoo Credit Waitlist",
+    href: "/tattoo-project-membership",
+  },
+  {
+    title: "Tattoo Portal",
+    href: "/tattoo-portal",
+  },
+];
 
-  if (typeof timestamp.toMillis === "function") {
-    return timestamp.toMillis();
-  }
-
-  return 0;
-}
-
-function formatDate(timestamp) {
-  const millis = timestampToMillis(timestamp);
-
-  if (!millis) return "No date";
-
-  return new Date(millis).toLocaleString("en-CA", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
-function formatValue(value) {
-  if (value === true) return "Yes";
-  if (value === false) return "No";
-  if (value === null || value === undefined || value === "") {
-    return "Not provided";
-  }
-
-  return String(value)
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatMoneyFromCents(cents) {
-  const amount = Number(cents || 0) / 100;
-
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-  }).format(amount);
-}
-
-function isCountedPayment(payment) {
-  return payment.status === "paid" || payment.status === "partial";
-}
-
-function getCreditDeltaCents(payment) {
-  if (!isCountedPayment(payment)) return 0;
-
-  const amount = Number(payment.amountCents || 0);
-
-  if (payment.creditHandling === "adds_in_studio_credit") {
-    return amount;
-  }
-
-  if (payment.creditHandling === "uses_in_studio_credit") {
-    return -amount;
-  }
-
-  if (payment.creditHandling === "refunds_or_removes_credit") {
-    return -amount;
-  }
-
-  return 0;
-}
-
-function getActivityTime(item) {
-  return (
-    timestampToMillis(item.lastMessageAt) ||
-    timestampToMillis(item.updatedAt) ||
-    timestampToMillis(item.createdAt) ||
-    timestampToMillis(item.receivedAt) ||
-    timestampToMillis(item.startAt)
-  );
-}
-
-function getItemLabel(item) {
-  if (item.kind === "message") return item.subject || "Client Message";
-  if (item.kind === "consult") return item.clientName || "Consult Request";
-  if (item.kind === "application") return item.clientName || "Membership Application";
-  if (item.kind === "appointment") return item.title || "Appointment";
-  if (item.kind === "payment") return item.clientName || "Payment";
-  if (item.kind === "offerResponse") return item.clientName || "Offer Response";
-  if (item.kind === "membershipRequest") return item.clientName || "Membership Request";
-  if (item.kind === "project") return item.projectName || "Tattoo Project";
-
-  return "Activity";
-}
-
-export default function AdminDashboardHome() {
+export default function AdminDashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
-  const [adminChecked, setAdminChecked] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [nowMillis, setNowMillis] = useState(null);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const [clients, setClients] = useState([]);
-  const [consults, setConsults] = useState([]);
-  const [applications, setApplications] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [conversations, setConversations] = useState([]);
-  const [appointments, setAppointments] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [membershipChangeRequests, setMembershipChangeRequests] = useState([]);
-  const [offerResponses, setOfferResponses] = useState([]);
-
-  const [authError, setAuthError] = useState("");
-  const [actionError, setActionError] = useState("");
-
-  useEffect(() => {
-    function updateNow() {
-      setNowMillis(Date.now());
-    }
-
-    updateNow();
-
-    const timer = setInterval(updateNow, 60000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  const unreadAdminMessages = useMemo(() => {
-    return conversations.filter((conversation) => conversation.unreadForAdmin);
-  }, [conversations]);
-
-  const newConsults = useMemo(() => {
-    return consults.filter((consult) => {
-      return !consult.status || consult.status === "new";
-    });
-  }, [consults]);
-
-  const newApplications = useMemo(() => {
-    return applications.filter((application) => {
-      return (
-        !application.status ||
-        application.status === "new" ||
-        application.status === "review_needed"
-      );
-    });
-  }, [applications]);
-
-  const offersSent = useMemo(() => {
-    return applications.filter((application) => {
-      return application.status === "membership_offer_sent";
-    });
-  }, [applications]);
-
-  const newOfferResponses = useMemo(() => {
-    return offerResponses.filter((response) => {
-      return !response.responseStatus || response.responseStatus === "new";
-    });
-  }, [offerResponses]);
-
-  const newMembershipRequests = useMemo(() => {
-    return membershipChangeRequests.filter((request) => {
-      return (
-        !request.requestStatus ||
-        request.requestStatus === "new" ||
-        request.requestStatus === "reviewing"
-      );
-    });
-  }, [membershipChangeRequests]);
-
-  const upcomingAppointments = useMemo(() => {
-    if (!nowMillis) return [];
-
-    return appointments
-      .filter((appointment) => {
-        const startMillis = timestampToMillis(appointment.startAt);
-
-        if (!startMillis) return false;
-
-        return startMillis >= nowMillis && appointment.status !== "cancelled";
-      })
-      .sort(
-        (a, b) =>
-          timestampToMillis(a.startAt) - timestampToMillis(b.startAt)
-      );
-  }, [appointments, nowMillis]);
-
-  const activeProjects = useMemo(() => {
-    return projects.filter((project) => {
-      return !["completed", "cancelled", "declined"].includes(project.status);
-    });
-  }, [projects]);
-
-  const paymentSummary = useMemo(() => {
-    return payments.reduce(
-      (summary, payment) => {
-        const amount = Number(payment.amountCents || 0);
-
-        if (isCountedPayment(payment)) {
-          summary.totalRecordedCents += amount;
-        }
-
-        summary.activeCreditCents += getCreditDeltaCents(payment);
-
-        if (payment.paymentMethod === "afterpay_financing") {
-          summary.afterpayCents += amount;
-        }
-
-        return summary;
-      },
-      {
-        totalRecordedCents: 0,
-        activeCreditCents: 0,
-        afterpayCents: 0,
-      }
-    );
-  }, [payments]);
-
-  const recentActivity = useMemo(() => {
-    const activityItems = [
-      ...conversations.map((item) => ({ ...item, kind: "message" })),
-      ...consults.map((item) => ({ ...item, kind: "consult" })),
-      ...applications.map((item) => ({ ...item, kind: "application" })),
-      ...appointments.map((item) => ({ ...item, kind: "appointment" })),
-      ...payments.map((item) => ({ ...item, kind: "payment" })),
-      ...membershipChangeRequests.map((item) => ({
-        ...item,
-        kind: "membershipRequest",
-      })),
-      ...offerResponses.map((item) => ({ ...item, kind: "offerResponse" })),
-      ...projects.map((item) => ({ ...item, kind: "project" })),
-    ];
-
-    return activityItems
-      .filter((item) => getActivityTime(item))
-      .sort((a, b) => getActivityTime(b) - getActivityTime(a))
-      .slice(0, 8);
-  }, [
-    conversations,
-    consults,
-    applications,
-    appointments,
-    payments,
-    membershipChangeRequests,
-    offerResponses,
-    projects,
-  ]);
+  const [adminProfile, setAdminProfile] = useState(null);
+  const [isCheckingAccess, setIsCheckingAccess] = useState(true);
+  const [accessError, setAccessError] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setAdminChecked(false);
-      setIsAdmin(false);
+      setAccessError("");
 
       if (!currentUser) {
-        setAdminChecked(true);
+        setUser(null);
+        setAdminProfile(null);
+        setIsCheckingAccess(false);
+        router.push("/tattoo-portal");
         return;
       }
 
@@ -281,496 +152,206 @@ export default function AdminDashboardHome() {
         const adminRef = doc(db, "adminUsers", currentUser.uid);
         const adminSnap = await getDoc(adminRef);
 
-        if (adminSnap.exists() && adminSnap.data().active === true) {
-          setIsAdmin(true);
+        if (!adminSnap.exists() || adminSnap.data().active !== true) {
+          await signOut(auth);
+          setUser(null);
+          setAdminProfile(null);
+          setAccessError("This account is not approved for admin access.");
+          setIsCheckingAccess(false);
+          router.push("/tattoo-portal");
+          return;
         }
+
+        setUser(currentUser);
+        setAdminProfile(adminSnap.data());
       } catch (error) {
         console.error(error);
+        setAccessError("Could not verify admin access.");
       } finally {
-        setAdminChecked(true);
+        setIsCheckingAccess(false);
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
-    if (!user || !isAdmin) return;
-
-    const unsubscribers = [];
-
-    function subscribeToCollection(collectionName, setter, errorMessage) {
-      const collectionQuery = query(collection(db, collectionName));
-
-      const unsubscribe = onSnapshot(
-        collectionQuery,
-        (snapshot) => {
-          const nextItems = snapshot.docs.map((itemDoc) => ({
-            id: itemDoc.id,
-            ...itemDoc.data(),
-          }));
-
-          setter(nextItems);
-          setActionError("");
-        },
-        (error) => {
-          console.error(error);
-          setActionError(errorMessage);
-        }
-      );
-
-      unsubscribers.push(unsubscribe);
-    }
-
-    subscribeToCollection(
-      "clients",
-      setClients,
-      "Could not load clients. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "consultRequests",
-      setConsults,
-      "Could not load consult requests. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "membershipApplications",
-      setApplications,
-      "Could not load membership applications. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "projects",
-      setProjects,
-      "Could not load projects. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "conversations",
-      setConversations,
-      "Could not load conversations. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "appointments",
-      setAppointments,
-      "Could not load appointments. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "payments",
-      setPayments,
-      "Could not load payments. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "membershipChangeRequests",
-      setMembershipChangeRequests,
-      "Could not load membership requests. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "membershipOfferResponses",
-      setOfferResponses,
-      "Could not load offer responses. Check Firestore rules."
-    );
-
-    return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
-    };
-  }, [user, isAdmin]);
-
-  async function handleLogin(event) {
-    event.preventDefault();
-    setAuthError("");
-
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      console.error(error);
-      setAuthError("Login failed. Check your email and password.");
-    }
+  async function handleLogout() {
+    await signOut(auth);
+    router.push("/tattoo-portal");
   }
 
-  if (!adminChecked) {
+  if (isCheckingAccess) {
     return (
-      <main className="admin-page">
-        <section className="admin-card">
-          <p>Checking admin access...</p>
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-sm font-black uppercase tracking-[0.28em] text-white/45">
+            Checking admin access...
+          </p>
         </section>
       </main>
     );
   }
 
-  if (!user) {
+  if (accessError && !user) {
     return (
-      <main className="admin-page">
-        <section className="admin-card admin-login-card">
-          <p className="eyebrow">Admin Login</p>
-          <h1>Dashboard</h1>
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-3xl px-5 py-12 md:px-8 md:py-16">
+          <div className="rounded-[2rem] border border-red-400/25 bg-red-500/10 p-5 md:p-8">
+            <p className="text-sm font-black uppercase tracking-[0.28em] text-red-100/60">
+              Admin Access
+            </p>
 
-          <form className="admin-form" onSubmit={handleLogin}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
+            <h1 className="mt-4 text-4xl font-black tracking-[-0.06em] text-white md:text-6xl">
+              Access denied.
+            </h1>
 
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
+            <p className="mt-5 text-base font-semibold leading-8 text-red-50/75">
+              {accessError}
+            </p>
 
-            {authError && <p className="error-message">{authError}</p>}
-
-            <button className="button button-primary" type="submit">
-              Log In
-            </button>
-          </form>
-        </section>
-      </main>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <main className="admin-page">
-        <section className="admin-card">
-          <p className="eyebrow">Access Denied</p>
-          <h1>This account is not an admin.</h1>
-
-          <p>
-            Add this user’s Firebase UID to the <strong>adminUsers</strong>{" "}
-            collection in Firestore, then refresh.
-          </p>
-
-          <p>
-            Current user: <strong>{user.email}</strong>
-          </p>
-
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={async () => {
-            await signOut(auth);
-            router.push("/tattoo-portal");
-          }}
-        >
-          Log Out
-        </button>
+            <Link className="button button-primary mt-6" href="/tattoo-portal">
+              Back to Tattoo Portal
+            </Link>
+          </div>
         </section>
       </main>
     );
   }
 
   return (
-    <main className="admin-page">
-      <section className="admin-header">
-        <div>
-          <p className="eyebrow">Admin</p>
-          <h1>Dashboard</h1>
-
-          <p>
-            Studio overview for clients, consults, projects, appointments,
-            payments, memberships, and messages.
+    <main className="min-h-screen bg-black text-white">
+      <section className="border-b border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+            Fawcett Tattoos & Art Studio
           </p>
-        </div>
 
-        <div className="admin-header-actions">
-          <Link className="button button-secondary" href="/admin/inbox">
-            Inbox
-          </Link>
+          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <h1 className="max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
+                Admin Dashboard.
+              </h1>
 
-          <Link className="button button-secondary" href="/admin/clients">
-            Clients
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/schedule">
-            Schedule
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/payments">
-            Payments
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/credit-ledger">
-            Credit Ledger
-          </Link>
-
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={async () => {
-            await signOut(auth);
-            router.push("/tattoo-portal");
-          }}
-        >
-          Log Out
-        </button>
-        </div>
-      </section>
-
-      {actionError && <p className="error-message">{actionError}</p>}
-
-      <section className="admin-dashboard-money-grid">
-        <article className="admin-dashboard-money-card admin-dashboard-money-card-blue">
-          <p>Total Recorded Payments</p>
-          <strong>
-            {formatMoneyFromCents(paymentSummary.totalRecordedCents)}
-          </strong>
-          <span>Paid and partially paid records</span>
-        </article>
-
-        <article className="admin-dashboard-money-card">
-          <p>Active In-Studio Credit</p>
-          <strong>{formatMoneyFromCents(paymentSummary.activeCreditCents)}</strong>
-          <span>Calculated from payment records</span>
-        </article>
-
-        <article className="admin-dashboard-money-card">
-          <p>Afterpay / Financing</p>
-          <strong>{formatMoneyFromCents(paymentSummary.afterpayCents)}</strong>
-          <span>Track fee-heavy payment activity</span>
-        </article>
-      </section>
-
-      <section className="admin-dashboard-stat-grid">
-        <article className="portal-stat-card">
-          <p>Unread Messages</p>
-          <strong>{unreadAdminMessages.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>New Consults</p>
-          <strong>{newConsults.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Applications</p>
-          <strong>{applications.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Upcoming Appointments</p>
-          <strong>{upcomingAppointments.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Active Projects</p>
-          <strong>{activeProjects.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Offers Sent</p>
-          <strong>{offersSent.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Offer Responses</p>
-          <strong>{newOfferResponses.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Payment Requests</p>
-          <strong>{newMembershipRequests.length}</strong>
-        </article>
-      </section>
-
-      <section className="admin-dashboard-layout">
-        <article className="admin-card admin-dashboard-card">
-          <div className="panel-heading">
-            <h2>Needs Attention</h2>
-            <p>
-              {unreadAdminMessages.length +
-                newConsults.length +
-                newApplications.length +
-                newOfferResponses.length +
-                newMembershipRequests.length}
-            </p>
-          </div>
-
-          <div className="mini-record-list">
-            <Link className="mini-record-card mini-record-link" href="/admin/inbox">
-              <strong>Unread Messages</strong>
-              <span>{unreadAdminMessages.length} waiting for admin review</span>
-            </Link>
-
-            <Link
-              className="mini-record-card mini-record-link"
-              href="/admin/consults"
-            >
-              <strong>New Consults</strong>
-              <span>{newConsults.length} new consult requests</span>
-            </Link>
-
-            <Link
-              className="mini-record-card mini-record-link"
-              href="/admin/membership-offers"
-            >
-              <strong>Membership Applications</strong>
-              <span>{newApplications.length} need review or offer setup</span>
-            </Link>
-
-            <Link
-              className="mini-record-card mini-record-link"
-              href="/admin/membership-offer-responses"
-            >
-              <strong>Offer Responses</strong>
-              <span>{newOfferResponses.length} new client responses</span>
-            </Link>
-
-            <Link
-              className="mini-record-card mini-record-link"
-              href="/admin/membership-requests"
-            >
-              <strong>Payment Change Requests</strong>
-              <span>{newMembershipRequests.length} pause/cancel/change requests</span>
-            </Link>
-          </div>
-        </article>
-
-        <article className="admin-card admin-dashboard-card">
-          <div className="panel-heading">
-            <h2>Upcoming Appointments</h2>
-            <p>{upcomingAppointments.length}</p>
-          </div>
-
-          {upcomingAppointments.length === 0 ? (
-            <p>No upcoming appointments yet.</p>
-          ) : (
-            <div className="mini-record-list">
-              {upcomingAppointments.slice(0, 5).map((appointment) => (
-                <div key={appointment.id} className="mini-record-card">
-                  <strong>{appointment.title || "Studio Appointment"}</strong>
-                  <span>{appointment.clientName || appointment.clientEmail}</span>
-                  <span>
-                    {formatDate(appointment.startAt)} ·{" "}
-                    {formatValue(appointment.status)}
-                  </span>
-                </div>
-              ))}
+              <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
+                Manage intake, Tattoo Portal messages, client files, projects,
+                appointments, payments, In-Studio Credit, and membership
+                requests from one place.
+              </p>
             </div>
-          )}
 
-          <div className="portal-card-action">
-            <Link className="button button-secondary" href="/admin/schedule">
-              Open Schedule
-            </Link>
-          </div>
-        </article>
+            <div className="flex flex-wrap gap-3 lg:justify-end">
+              <Link className="button button-primary" href="/admin/intake">
+                Open Intake
+              </Link>
 
-        <article className="admin-card admin-dashboard-card">
-          <div className="panel-heading">
-            <h2>Recent Activity</h2>
-            <p>{recentActivity.length}</p>
-          </div>
-
-          {recentActivity.length === 0 ? (
-            <p>No recent activity yet.</p>
-          ) : (
-            <div className="mini-record-list">
-              {recentActivity.map((item) => (
-                <div key={`${item.kind}-${item.id}`} className="mini-record-card">
-                  <strong>{getItemLabel(item)}</strong>
-                  <span>{formatValue(item.kind)}</span>
-                  <span>{formatDate(getActivityTime(item))}</span>
-                </div>
-              ))}
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={handleLogout}
+              >
+                Log Out
+              </button>
             </div>
-          )}
-        </article>
-
-        <article className="admin-card admin-dashboard-card">
-          <div className="panel-heading">
-            <h2>Quick Actions</h2>
-            <p>Admin</p>
           </div>
 
-          <div className="admin-dashboard-action-grid">
-            <Link className="button button-primary" href="/admin/inbox">
-              Inbox
-            </Link>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <article className="rounded-[1.5rem] border border-[#0000cc]/60 bg-[#0000cc]/15 p-5 shadow-[0_0_35px_rgba(0,0,204,0.18)]">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                Signed In
+              </p>
 
-            <Link className="button button-secondary" href="/admin/intake">
-              Intake
-            </Link>
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                {adminProfile?.displayName || user?.email || "Admin"}
+              </h2>
 
-            <Link className="button button-secondary" href="/admin/clients">
-              Clients
-            </Link>
+              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                Approved studio admin account.
+              </p>
+            </article>
 
-            <Link className="button button-secondary" href="/admin/consults">
-              Consults
-            </Link>
+            <article className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                Best First Step
+              </p>
 
-            <Link
-              className="button button-secondary"
-              href="/admin/applications"
-            >
-              Applications
-            </Link>
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                Intake
+              </h2>
 
-            <Link
-              className="button button-secondary"
-              href="/admin/membership-offers"
-            >
-              Membership Offers
-            </Link>
+              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                Start here to review what needs your attention.
+              </p>
+            </article>
 
-            <Link
-              className="button button-secondary"
-              href="/admin/membership-offer-responses"
-            >
-              Offer Responses
-            </Link>
+            <article className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                Public Site
+              </p>
 
-            <Link
-              className="button button-secondary"
-              href="/admin/membership-requests"
-            >
-              Membership Requests
-            </Link>
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                Launch Check
+              </h2>
 
-            <Link className="button button-secondary" href="/admin/projects">
-              Projects
-            </Link>
-
-            <Link className="button button-secondary" href="/admin/schedule">
-              Schedule
-            </Link>
-
-            <Link className="button button-secondary" href="/admin/project-timeline">
-             Timeline
-            </Link>
-
-            <Link className="button button-secondary" href="/admin/payments">
-              Payments
-            </Link>
-
-            <Link
-              className="button button-secondary"
-              href="/admin/credit-ledger"
-            >
-              Credit Ledger
-            </Link>
+              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                Check pricing, consult, aftercare, policies, and waitlist pages.
+              </p>
+            </article>
           </div>
+        </div>
+      </section>
 
-          <div className="admin-dashboard-note">
-            <strong>Reminder:</strong> Membership approvals, payment changes,
-            credit balances, and project estimates should be reviewed before
-            confirming anything with a client.
+      <section className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
+        <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+          Admin Tools
+        </p>
+
+        <h2 className="mt-4 max-w-5xl text-4xl font-black leading-[0.95] tracking-[-0.06em] text-white md:text-6xl">
+          Studio control center.
+        </h2>
+
+        <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {dashboardCards.map((card) => (
+            <Link
+              key={card.title}
+              href={card.href}
+              className="group rounded-[1.6rem] border border-white/10 bg-white/[0.045] p-5 text-white no-underline transition hover:-translate-y-1 hover:border-[#0000cc]/70 hover:bg-[#0000cc]/15 md:p-7"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <h3 className="text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                  {card.title}
+                </h3>
+
+                <span className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white shadow-[0_0_24px_rgba(0,0,204,0.25)]">
+                  {card.label}
+                </span>
+              </div>
+
+              <p className="mt-5 text-base font-semibold leading-8 text-white/68">
+                {card.description}
+              </p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="border-t border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-10 md:px-8">
+          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+            Public Page Shortcuts
+          </p>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            {publicLinks.map((link) => (
+              <Link
+                key={link.title}
+                className="button button-secondary"
+                href={link.href}
+              >
+                {link.title}
+              </Link>
+            ))}
           </div>
-        </article>
+        </div>
       </section>
     </main>
   );
