@@ -2,287 +2,292 @@ import Link from "next/link";
 import MembershipApplicationForm from "@/components/MembershipApplicationForm";
 
 export const metadata = {
-  title: "Tattoo Project Membership Program | Fawcett Tattoo & Art Studio",
+  title: "Tattoo Project Membership",
   description:
-    "Apply for the Tattoo ProjectMembership Program waitlist at Fawcett Tattoo & Art Studio in Edmonton, Alberta.",
+    "Apply for the Tattoo Project Membership waitlist at Fawcett Tattoos & Art Studio. Build In-Studio Credit toward an approved larger tattoo project.",
 };
 
-const tiers = [
+const membershipTiers = [
   {
-    name: "Starter Member",
-    initial: "$500",
+    title: "Starter Member",
+    price: "$500 initial",
     monthly: "$150/month",
-    minimum: "$2,000+",
-    bestFor:
-      "Clients beginning a larger tattoo project with a smaller monthly structure.",
+    minimum: "$2,000+ project",
+    description:
+      "Best for clients planning a medium custom project and wanting to build In-Studio Credit over time.",
   },
   {
-    name: "Builder Member",
-    initial: "$750",
+    title: "Builder Member",
+    price: "$750 initial",
     monthly: "$300/month",
-    minimum: "$3,500+",
-    bestFor:
-      "Clients actively planning medium-to-large custom tattoo work with a median monthly structure.",
+    minimum: "$3,500+ project",
+    description:
+      "Best for clients planning a larger custom tattoo, cover-up, or multi-session piece.",
   },
   {
-    name: "Commitment Member",
-    initial: "$1,000",
+    title: "Commitment Member",
+    price: "$1,000 initial",
     monthly: "$500/month",
-    minimum: "$6,000+",
-    bestFor:
-      "Clients planning larger multi-session projects such as sleeves, leg projects, or back pieces with a higher monthly commitment.",
+    minimum: "$6,000+ project",
+    description:
+      "Best for sleeve commitments, large-scale work, and serious multi-session planning.",
+  },
+];
+
+const howItWorks = [
+  {
+    title: "1. Apply",
+    text: "Submit your project idea, placement, budget comfort, artist preference, and timeline through the waitlist form.",
+  },
+  {
+    title: "2. Studio Review",
+    text: "We review project fit, artist availability, health/readiness, estimated scope, and whether a membership structure makes sense.",
+  },
+  {
+    title: "3. Confirm Terms",
+    text: "If approved, the studio provides the payment schedule, project estimate or planning range, required costs, pause/cancel terms, and credit-use terms before enrollment.",
+  },
+  {
+    title: "4. Build Credit",
+    text: "Approved payments would build In-Studio Credit toward the approved tattoo project according to studio terms.",
+  },
+];
+
+const importantNotes = [
+  "This is an interest/waitlist application only.",
+  "No payment is collected through this website application.",
+  "Submitting an application does not guarantee approval, booking, pricing, or artist availability.",
+  "Membership payments are not a flat-rate tattoo package.",
+  "Final project cost depends on the approved project estimate, artist, size, placement, complexity, skin, cover-up needs, design changes, healing, and session time.",
+  "All mandatory costs are disclosed before enrollment.",
+];
+
+const faqs = [
+  {
+    question: "Are these flat-rate tattoo prices?",
+    answer:
+      "No. The Tattoo Project Membership Program is not a flat-rate tattoo package. The tiers are a planning structure for approved clients to build In-Studio Credit toward an approved tattoo project. Final pricing depends on the project estimate, artist, size, placement, complexity, skin, cover-up needs, design changes, healing, and session time.",
+  },
+  {
+    question: "Does applying guarantee acceptance?",
+    answer:
+      "No. Submitting an application does not guarantee approval, booking, pricing, artist availability, or membership enrollment. The studio reviews each request before confirming next steps.",
+  },
+  {
+    question: "Do the payments go toward my tattoo?",
+    answer:
+      "If approved and enrolled, payments would build In-Studio Credit toward the approved tattoo project according to the written terms provided by the studio before enrollment.",
+  },
+  {
+    question: "Are there extra costs?",
+    answer:
+      "There may be additional required costs depending on the project, including supplies, GST, deposits, booking fees, drawing or design fees, processing fees, or other project-specific costs. Required costs are disclosed before enrollment.",
+  },
+  {
+    question: "Can I pay today?",
+    answer:
+      "No payment is collected through this website application. This page is for waitlist and application review only. If approved, the studio will provide the full terms before any payment is accepted.",
+  },
+  {
+    question: "Can I pause or cancel later?",
+    answer:
+      "Pause or cancellation requests must be reviewed by the studio. Approval, credit use, refunds, transfers, and future booking depend on the written terms, project status, payment method, and studio policy.",
   },
 ];
 
 export default function TattooProjectMembershipPage() {
   return (
-    <main className="membership-page">
-      <section className="membership-hero">
-        <p className="eyebrow">Fawcett Tattoo & Art Studio</p>
+    <main className="min-h-screen bg-black text-white">
+      <section className="border-b border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <Link href="/" className="text-sm text-white/60 hover:text-white">
+            ← Back to Home
+          </Link>
 
-        <h1>The Tattoo Project Membership Program</h1>
+          <p className="mt-8 text-xs uppercase tracking-[0.32em] text-white/45">
+            Tattoo Credit Waitlist
+          </p>
 
-        <p className="hero-subtitle">
-          A structured tattoo-project payment program for approved clients
-          planning larger custom tattoo work.
-        </p>
+          <h1 className="mt-4 max-w-6xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
+            The Tattoo Project Membership Program.
+          </h1>
 
-        <p>
-          We are currently testing interest in a founding version of this
-          program for clients who want to actively plan and complete a larger
-          tattoo project within the next 12–36 months.
-        </p>
+          <p className="mt-6 max-w-4xl text-lg leading-8 text-white/70">
+            A planning structure for approved clients who want to build
+            In-Studio Credit toward a larger custom tattoo project over time.
+            This is designed for serious multi-session work, not impulse
+            bookings or flat-rate tattoo packages.
+          </p>
 
-        <p>
-          This is not a discount, loan, investment, fundraiser, donation,
-          ownership opportunity, or cash-return program. At this stage, we are
-          collecting applications only. No payment is collected through this
-          website form.
-        </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a className="button button-primary" href="#membership-application">
+              Apply for the Waitlist
+            </a>
 
-        <div className="button-row">
-          <a className="button button-primary" href="#apply">
-            Apply for the Waitlist
-          </a>
+            <Link className="button button-secondary" href="/tattoo-portal">
+              Tattoo Portal Login
+            </Link>
 
-          <a className="button button-secondary" href="#tiers">
-            View Tiers
-          </a>
+            <Link className="button button-secondary" href="/pricing">
+              View Pricing
+            </Link>
 
-          <a className="button button-secondary" href="/portal/messages">
-            Tattoo Portal Login
-          </a>
-        </div>
-      </section>
-
-      <section className="content-section">
-        <h2>What it is</h2>
-        <p>
-          The Tattoo Project Membership Program is designed to help approved
-          clients organize project planning, tattoo credit, booking
-          expectations, and payment structure before starting a larger custom
-          tattoo project.
-        </p>
-
-        <p>
-          If accepted later, initial payments and monthly payments would build
-          tattoo credit toward an approved tattoo project. Final project cost
-          depends on the tattoo concept, artist, size, placement, complexity,
-          skin, cover-up needs, design changes, session time, and written
-          project estimate.
-        </p>
-      </section>
-
-      <section className="content-section">
-        <h2>Who it is for</h2>
-
-        <ul className="check-list">
-          <li>
-            Clients planning a full sleeve, half sleeve, leg project, back
-            piece, cover-up, or multi-session custom tattoo.
-          </li>
-          <li>
-            Clients who are serious about planning a project within 12-36
-            months.
-          </li>
-          <li>
-            Clients who want a structured way to build tattoo credit toward an
-            approved project.
-          </li>
-          <li>
-            Clients who are comfortable following studio booking, health,
-            preparation, and cancellation policies.
-          </li>
-        </ul>
-      </section>
-
-      <section className="content-section">
-        <h2>How it works</h2>
-
-        <div className="steps-grid">
-          <div>
-            <h3>1. Apply</h3>
-            <p>
-              Submit your tattoo idea, preferred artist, placement, timeline,
-              and budget comfort level.
-            </p>
-          </div>
-
-          <div>
-            <h3>2. Review</h3>
-            <p>
-              We review your project for artist fit, timeline, size, complexity,
-              and studio readiness.
-            </p>
-          </div>
-
-          <div>
-            <h3>3. Consult</h3>
-            <p>
-              If your project may be a fit, we may contact you through your
-              client account for follow-up questions.
-            </p>
-          </div>
-
-          <div>
-            <h3>4. Terms later</h3>
-            <p>
-              No client is enrolled until written terms, estimate, payment
-              schedule, and full mandatory costs are disclosed.
-            </p>
+            <Link className="button button-secondary" href="/policies">
+              View Policies
+            </Link>
           </div>
         </div>
       </section>
 
-      <section id="tiers" className="content-section">
-        <h2>Founding Member Interest Tiers</h2>
+      <section className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
+        <div className="grid gap-5 md:grid-cols-3">
+          {membershipTiers.map((tier) => (
+            <article
+              key={tier.title}
+              className="rounded-[1.6rem] border border-white/10 bg-white/[0.045] p-5 md:p-7"
+            >
+              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                Founding Interest Tier
+              </p>
 
-        <p>
-          These tiers are not flat-rate tattoos, guaranteed packages, or
-          discounts. They are planning and tattoo-credit structures for approved
-          projects.
-        </p>
+              <h2 className="mt-4 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                {tier.title}
+              </h2>
 
-        <div className="tier-grid">
-          {tiers.map((tier) => (
-            <article className="tier-card" key={tier.name}>
-              <h3>{tier.name}</h3>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <p className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-5 py-2.5 text-lg font-black tracking-[-0.04em] text-white shadow-[0_0_30px_rgba(0,0,204,0.3)]">
+                  {tier.price}
+                </p>
 
-              <dl>
-                <div>
-                  <dt>Initial payment</dt>
-                  <dd>{tier.initial}</dd>
-                </div>
+                <p className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-2.5 text-lg font-black tracking-[-0.04em] text-white">
+                  {tier.monthly}
+                </p>
+              </div>
 
-                <div>
-                  <dt>Monthly payment</dt>
-                  <dd>{tier.monthly}</dd>
-                </div>
+              <p className="mt-5 text-sm font-black uppercase tracking-[0.18em] text-white/45">
+                {tier.minimum}
+              </p>
 
-                <div>
-                  <dt>Minimum project value</dt>
-                  <dd>{tier.minimum}</dd>
-                </div>
-              </dl>
-
-              <p>{tier.bestFor}</p>
-
-              <a className="button button-small" href="#apply">
-                Apply as a {tier.name}
-              </a>
+              <p className="mt-5 text-base font-semibold leading-8 text-white/68">
+                {tier.description}
+              </p>
             </article>
           ))}
         </div>
-
-        <p className="legal-note">
-          All mandatory costs will be disclosed before enrollment, including
-          tattoo time, supplies, GST, deposits, booking fees, drawing or design
-          fees, payment-processing fees, and any other required costs.
-        </p>
       </section>
 
-      <section className="content-section transparency-box">
-        <h2>Transparency First</h2>
+      <section className="border-y border-white/10 bg-white/[0.02]">
+        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+            How It Works
+          </p>
 
-        <p>
-          This program is currently in the application and interest-testing
-          stage. No payment is collected through this website form.
-        </p>
+          <h2 className="mt-4 max-w-5xl text-4xl font-black leading-[0.95] tracking-[-0.06em] text-white md:text-6xl">
+            Apply first. Review first. Confirm terms before payment.
+          </h2>
 
-        <p>
-          Applying does not guarantee acceptance, enrollment, booking access,
-          project approval, final pricing, priority placement, or a specific
-          artist.
-        </p>
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
+            {howItWorks.map((step) => (
+              <article
+                key={step.title}
+                className="rounded-[1.6rem] border border-white/10 bg-black p-5 md:p-7"
+              >
+                <h3 className="text-2xl font-black tracking-[-0.04em] text-white">
+                  {step.title}
+                </h3>
 
-        <p>
-          Before enrollment, each approved client will receive written program
-          terms, a project estimate, payment schedule, cancellation policy,
-          refund &/or credit policy, and a full breakdown of all mandatory costs.
-        </p>
+                <p className="mt-4 text-base font-semibold leading-8 text-white/68">
+                  {step.text}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
-      <section id="apply" className="content-section">
-        <h2>Apply for the Waitlist</h2>
-        <p>
-          Create a tattoo portal login first, then submit your project application.
-          This keeps your project details, messages, and future tattoo portal
-          data connected to your account.
-        </p>
+      <section className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
+        <div className="grid gap-5 rounded-[2rem] border border-[#0000cc]/40 bg-[#0000cc]/15 p-5 md:grid-cols-[0.75fr_1fr] md:p-8">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-white/55">
+              Important
+            </p>
 
-        <MembershipApplicationForm />
+            <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-white md:text-5xl">
+              This is not a loan, investment, or flat-rate tattoo.
+            </h2>
+          </div>
+
+          <ul className="grid gap-3">
+            {importantNotes.map((note) => (
+              <li
+                key={note}
+                className="text-base font-semibold leading-8 text-white/72"
+              >
+                {note}
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
-      <section className="content-section faq-section">
-        <h2>Frequently Asked Questions</h2>
-
-        <details>
-          <summary>Are these flat-rate tattoo prices?</summary>
-          <p>
-            No. These are not flat-rate tattoo prices or guaranteed tattoo
-            packages. Final pricing depends on the approved project estimate.
+      <section
+        id="membership-application"
+        className="mx-auto max-w-5xl scroll-mt-24 px-5 pb-16 md:px-8"
+      >
+        <div className="rounded-[2rem] border border-white/10 bg-white/[0.055] p-5 md:p-8">
+          <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+            Waitlist Application
           </p>
-        </details>
 
-        <details>
-          <summary>Does applying guarantee acceptance?</summary>
-          <p>
-            No. Applications are reviewed based on project fit, artist
-            availability, project readiness, timeline, health requirements, and
-            studio policy.
-          </p>
-        </details>
+          <h2 className="mt-4 max-w-4xl text-4xl font-black leading-[0.95] tracking-[-0.06em] text-white md:text-6xl">
+            Apply for review.
+          </h2>
 
-        <details>
-          <summary>Do the payments go toward my tattoo?</summary>
-          <p>
-            If accepted and enrolled later, initial payments and monthly
-            payments would build tattoo credit toward your approved tattoo
-            project.
+          <p className="mt-5 max-w-3xl text-base font-semibold leading-8 text-white/70">
+            This form creates or uses your Tattoo Portal account so we can keep
+            your application, messages, project notes, payment requests, and
+            studio updates organized in one place.
           </p>
-        </details>
 
-        <details>
-          <summary>Are there extra costs?</summary>
-          <p>
-            There may be required costs depending on the project. All mandatory
-            costs will be disclosed in writing before enrollment.
-          </p>
-        </details>
-
-        <details>
-          <summary>Can I pay today?</summary>
-          <p>
-            No. The program is currently application-only. No payment is
-            collected through this website form.
-          </p>
-        </details>
+          <div className="mt-8">
+            <MembershipApplicationForm />
+          </div>
+        </div>
       </section>
 
-      <section className="content-section">
-        <Link className="button button-secondary" href="/">
-          Back to Fawcett Tattoos
-        </Link>
+            <section className="border-t border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+            Frequently Asked Questions
+          </p>
+
+          <h2 className="mt-4 max-w-5xl text-4xl font-black leading-[0.95] tracking-[-0.06em] text-white md:text-6xl">
+            Questions before applying.
+          </h2>
+
+          <div className="mt-10 grid gap-3">
+            {faqs.map((faq) => (
+              <details
+                key={faq.question}
+                className="group rounded-[1.25rem] border border-white/10 bg-white/[0.045] p-5"
+              >
+                <summary className="cursor-pointer list-none text-base font-black text-white md:text-lg">
+                  {faq.question}
+                </summary>
+
+                <p className="mt-4 max-w-5xl text-base font-semibold leading-8 text-white/68">
+                  {faq.answer}
+                </p>
+              </details>
+            ))}
+          </div>
+
+          <div className="mt-10 border-t border-white/10 pt-10">
+            <Link className="button button-secondary" href="/">
+              Back to Tattoo Website
+            </Link>
+          </div>
+        </div>
       </section>
     </main>
   );
