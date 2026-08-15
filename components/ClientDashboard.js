@@ -3,770 +3,376 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   collection,
   doc,
-  onSnapshot,
+  getDoc,
+  getDocs,
   query,
   where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseClient";
 
-function timestampToMillis(timestamp) {
-  if (!timestamp) return 0;
-
-  if (timestamp instanceof Date) {
-    return timestamp.getTime();
-  }
-
-  if (typeof timestamp.toMillis === "function") {
-    return timestamp.toMillis();
-  }
-
-  return 0;
-}
-
-function formatDate(timestamp) {
-  const millis = timestampToMillis(timestamp);
-
-  if (!millis) return "No date";
-
-  return new Date(millis).toLocaleString("en-CA", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
-function formatValue(value) {
-  if (value === true) return "Yes";
-  if (value === false) return "No";
-  if (value === null || value === undefined || value === "") {
-    return "Not provided";
-  }
-
-  return String(value)
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatMoneyFromCents(cents) {
-  const amount = Number(cents || 0) / 100;
-
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-  }).format(amount);
-}
-
-function isCountedPayment(payment) {
-  return payment.status === "paid" || payment.status === "partial";
-}
-
-function getCreditDeltaCents(payment) {
-  if (!isCountedPayment(payment)) return 0;
-
-  const amount = Number(payment.amountCents || 0);
-
-  if (payment.creditHandling === "adds_in_studio_credit") {
-    return amount;
-  }
-
-  if (payment.creditHandling === "uses_in_studio_credit") {
-    return -amount;
-  }
-
-  if (payment.creditHandling === "refunds_or_removes_credit") {
-    return -amount;
-  }
-
-  return 0;
-}
-
-function getLatestActivity(items) {
-  return items.reduce((latest, item) => {
-    const createdAt = timestampToMillis(item.createdAt);
-    const updatedAt = timestampToMillis(item.updatedAt);
-    const lastMessageAt = timestampToMillis(item.lastMessageAt);
-    const receivedAt = timestampToMillis(item.receivedAt);
-    const startAt = timestampToMillis(item.startAt);
-
-    return Math.max(
-      latest,
-      createdAt,
-      updatedAt,
-      lastMessageAt,
-      receivedAt,
-      startAt
-    );
-  }, 0);
-}
-
-function getMembershipOfferStatus(application) {
-  if (!application) return "No active offer";
-
-  if (application.status) {
-    return formatValue(application.status);
-  }
-
-  if (application.membershipOffer?.offerStatus) {
-    return formatValue(application.membershipOffer.offerStatus);
-  }
-
-  return "Application Submitted";
-}
+const portalCards = [
+  {
+    title: "Messages",
+    label: "Inbox",
+    description:
+      "Message the studio, reply to consult questions, and keep project communication organized.",
+    href: "/portal/messages",
+  },
+  {
+    title: "Appointments",
+    label: "Schedule",
+    description:
+      "View upcoming tattoo appointments, consults, and studio-booked session details.",
+    href: "/portal/appointments",
+  },
+  {
+    title: "Projects",
+    label: "Tattoo Work",
+    description:
+      "View your tattoo project records, project status, estimates, and studio notes.",
+    href: "/portal/projects",
+  },
+  {
+    title: "Project Timeline",
+    label: "Updates",
+    description:
+      "See client-visible project updates, planning notes, and important milestones.",
+    href: "/portal/project-timeline",
+  },
+  {
+    title: "In-Studio Credit",
+    label: "Account Value",
+    description:
+      "View recorded tattoo credit, payments, credit use, and account value history.",
+    href: "/portal/credit",
+  },
+  {
+    title: "Membership Offers",
+    label: "Offers",
+    description:
+      "Review Tattoo Project Membership offers, questions, responses, and next steps.",
+    href: "/portal/membership-offers",
+  },
+];
 
 export default function ClientDashboard() {
   const router = useRouter();
+
   const [user, setUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [nowMillis, setNowMillis] = useState(null);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
   const [clientProfile, setClientProfile] = useState(null);
-  const [consults, setConsults] = useState([]);
-  const [applications, setApplications] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [conversations, setConversations] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [payments, setPayments] = useState([]);
-  const [offerResponses, setOfferResponses] = useState([]);
-  const [membershipChangeRequests, setMembershipChangeRequests] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const [authError, setAuthError] = useState("");
-  const [loadError, setLoadError] = useState("");
+  const creditBalance = useMemo(() => {
+    return payments.reduce((total, payment) => {
+      const amount = Number(payment.amount || payment.paymentAmount || 0);
 
-  useEffect(() => {
-    function updateNow() {
-      setNowMillis(Date.now());
-    }
-
-    updateNow();
-
-    const timer = setInterval(updateNow, 60000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  const creditSummary = useMemo(() => {
-    return payments.reduce(
-      (summary, payment) => {
-        const delta = getCreditDeltaCents(payment);
-
-        if (payment.creditHandling === "adds_in_studio_credit" && delta > 0) {
-          summary.creditAddedCents += Number(payment.amountCents || 0);
-        }
-
-        if (payment.creditHandling === "uses_in_studio_credit" && delta < 0) {
-          summary.creditUsedCents += Number(payment.amountCents || 0);
-        }
-
-        if (
-          payment.creditHandling === "refunds_or_removes_credit" &&
-          delta < 0
-        ) {
-          summary.creditRemovedCents += Number(payment.amountCents || 0);
-        }
-
-        summary.balanceCents += delta;
-
-        return summary;
-      },
-      {
-        balanceCents: 0,
-        creditAddedCents: 0,
-        creditUsedCents: 0,
-        creditRemovedCents: 0,
+      if (payment.type === "credit_use" || payment.paymentType === "credit_use") {
+        return total - amount;
       }
-    );
+
+      if (
+        payment.type === "refund" ||
+        payment.paymentType === "refund" ||
+        payment.status === "refunded"
+      ) {
+        return total - amount;
+      }
+
+      return total + amount;
+    }, 0);
   }, [payments]);
 
-  const upcomingAppointments = useMemo(() => {
-    if (!nowMillis) return [];
-
-    return appointments
-      .filter((appointment) => {
-        const startMillis = timestampToMillis(appointment.startAt);
-
-        if (!startMillis) return false;
-
-        return startMillis >= nowMillis && appointment.status !== "cancelled";
-      })
-      .sort(
-        (a, b) =>
-          timestampToMillis(a.startAt) - timestampToMillis(b.startAt)
-      );
-  }, [appointments, nowMillis]);
-
-  const activeProjects = useMemo(() => {
-    return projects.filter((project) => {
-      return !["completed", "cancelled", "declined"].includes(project.status);
-    });
-  }, [projects]);
-
-  const unreadConversations = useMemo(() => {
-    return conversations.filter((conversation) => conversation.unreadForClient);
-  }, [conversations]);
-
-  const latestMembershipApplication = useMemo(() => {
-    return [...applications].sort((a, b) => {
-      const bTime = timestampToMillis(b.updatedAt) || timestampToMillis(b.createdAt);
-      const aTime = timestampToMillis(a.updatedAt) || timestampToMillis(a.createdAt);
-
-      return bTime - aTime;
-    })[0] || null;
-  }, [applications]);
-
-  const latestOfferResponse = useMemo(() => {
-    return [...offerResponses].sort(
-      (a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt)
-    )[0] || null;
-  }, [offerResponses]);
-
-  const latestMembershipChangeRequest = useMemo(() => {
-    return [...membershipChangeRequests].sort(
-      (a, b) => timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt)
-    )[0] || null;
-  }, [membershipChangeRequests]);
-
-  const latestActivityMillis = useMemo(() => {
-    return getLatestActivity([
-      clientProfile,
-      ...consults,
-      ...applications,
-      ...projects,
-      ...conversations,
-      ...appointments,
-      ...payments,
-      ...offerResponses,
-      ...membershipChangeRequests,
-    ].filter(Boolean));
-  }, [
-    clientProfile,
-    consults,
-    applications,
-    projects,
-    conversations,
-    appointments,
-    payments,
-    offerResponses,
-    membershipChangeRequests,
-  ]);
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthChecked(true);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setErrorMessage("");
 
-      if (currentUser?.email) {
-        setEmail(currentUser.email);
+      if (!currentUser) {
+        setUser(null);
+        setClientProfile(null);
+        setIsLoading(false);
+        router.push("/tattoo-portal");
+        return;
+      }
+
+      setUser(currentUser);
+
+      try {
+        const clientRef = doc(db, "clients", currentUser.uid);
+        const clientSnap = await getDoc(clientRef);
+
+        if (clientSnap.exists()) {
+          setClientProfile(clientSnap.data());
+        }
+
+        const projectsSnap = await getDocs(
+          query(
+            collection(db, "projects"),
+            where("clientUid", "==", currentUser.uid)
+          )
+        );
+
+        const appointmentsSnap = await getDocs(
+          query(
+            collection(db, "appointments"),
+            where("clientUid", "==", currentUser.uid)
+          )
+        );
+
+        const paymentsSnap = await getDocs(
+          query(
+            collection(db, "payments"),
+            where("clientUid", "==", currentUser.uid)
+          )
+        );
+
+        const offersSnap = await getDocs(
+          query(
+            collection(db, "membershipOffers"),
+            where("clientUid", "==", currentUser.uid)
+          )
+        );
+
+        setProjects(
+          projectsSnap.docs.map((projectDoc) => ({
+            id: projectDoc.id,
+            ...projectDoc.data(),
+          }))
+        );
+
+        setAppointments(
+          appointmentsSnap.docs.map((appointmentDoc) => ({
+            id: appointmentDoc.id,
+            ...appointmentDoc.data(),
+          }))
+        );
+
+        setPayments(
+          paymentsSnap.docs.map((paymentDoc) => ({
+            id: paymentDoc.id,
+            ...paymentDoc.data(),
+          }))
+        );
+
+        setOffers(
+          offersSnap.docs.map((offerDoc) => ({
+            id: offerDoc.id,
+            ...offerDoc.data(),
+          }))
+        );
+      } catch (error) {
+        console.error(error);
+        setErrorMessage("Could not load your Tattoo Portal dashboard.");
+      } finally {
+        setIsLoading(false);
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const unsubscribers = [];
-
-    const clientRef = doc(db, "clients", user.uid);
-
-    const unsubscribeClient = onSnapshot(
-      clientRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setClientProfile({
-            id: snapshot.id,
-            ...snapshot.data(),
-          });
-        } else {
-          setClientProfile(null);
-        }
-
-        setLoadError("");
-      },
-      (error) => {
-        console.error(error);
-        setLoadError("Could not load client profile.");
-      }
-    );
-
-    unsubscribers.push(unsubscribeClient);
-
-    function subscribeToOwnCollection(collectionName, setter, errorMessage) {
-      const collectionQuery = query(
-        collection(db, collectionName),
-        where("clientUid", "==", user.uid)
-      );
-
-      const unsubscribe = onSnapshot(
-        collectionQuery,
-        (snapshot) => {
-          const nextItems = snapshot.docs.map((itemDoc) => ({
-            id: itemDoc.id,
-            ...itemDoc.data(),
-          }));
-
-          setter(nextItems);
-          setLoadError("");
-        },
-        (error) => {
-          console.error(error);
-          setLoadError(errorMessage);
-        }
-      );
-
-      unsubscribers.push(unsubscribe);
-    }
-
-    subscribeToOwnCollection(
-      "consultRequests",
-      setConsults,
-      "Could not load consult requests."
-    );
-
-    subscribeToOwnCollection(
-      "membershipApplications",
-      setApplications,
-      "Could not load membership applications."
-    );
-
-    subscribeToOwnCollection(
-      "projects",
-      setProjects,
-      "Could not load projects."
-    );
-
-    subscribeToOwnCollection(
-      "conversations",
-      setConversations,
-      "Could not load conversations."
-    );
-
-    subscribeToOwnCollection(
-      "appointments",
-      setAppointments,
-      "Could not load appointments."
-    );
-
-    subscribeToOwnCollection(
-      "payments",
-      setPayments,
-      "Could not load payment records."
-    );
-
-    subscribeToOwnCollection(
-      "membershipOfferResponses",
-      setOfferResponses,
-      "Could not load membership offer responses."
-    );
-
-    subscribeToOwnCollection(
-      "membershipChangeRequests",
-      setMembershipChangeRequests,
-      "Could not load membership change requests."
-    );
-
-    return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
-    };
-  }, [user]);
-
-  async function handleLogin(event) {
-    event.preventDefault();
-    setAuthError("");
-
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      console.error(error);
-      setAuthError("Login failed. Check your email and password.");
-    }
+  async function handleLogout() {
+    await signOut(auth);
+    router.push("/tattoo-portal");
   }
 
-  if (!authChecked) {
-    return (
-      <main className="portal-page">
-        <section className="portal-card">
-          <p>Checking login...</p>
-        </section>
-      </main>
-    );
+  function formatMoney(amount) {
+    return new Intl.NumberFormat("en-CA", {
+      style: "currency",
+      currency: "CAD",
+    }).format(amount || 0);
   }
 
-  if (!user) {
+  if (isLoading) {
     return (
-      <main className="portal-page">
-        <section className="portal-card portal-login-card">
-          <p className="eyebrow">Tattoo Portal</p>
-          <h1>Client Dashboard</h1>
-
-          <p>
-            Log in to view your tattoo requests, project updates, credit,
-            appointments, and studio messages.
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-sm font-black uppercase tracking-[0.28em] text-white/45">
+            Loading Tattoo Portal...
           </p>
-
-          <form className="portal-form" onSubmit={handleLogin}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
-
-            {authError && <p className="error-message">{authError}</p>}
-
-            <button className="button button-primary" type="submit">
-              Log In
-            </button>
-          </form>
-
-          <div className="portal-action-row">
-            <Link className="button button-secondary" href="/consult">
-              Start a Consult
-            </Link>
-
-            <Link
-              className="button button-secondary"
-              href="/tattoo-project-membership"
-            >
-              Project Membership
-            </Link>
-          </div>
         </section>
       </main>
     );
   }
 
   return (
-    <main className="portal-page">
-      <section className="portal-header">
-        <div>
-          <p className="eyebrow">Tattoo Portal</p>
-          <h1>Dashboard</h1>
-
-          <p>
-            Welcome back,{" "}
-            <strong>
-              {clientProfile?.clientName || user.displayName || user.email}
-            </strong>
-            .
+    <main className="min-h-screen bg-black text-white">
+      <section className="border-b border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+            Fawcett Tattoos & Art Studio
           </p>
-        </div>
 
-        <div className="portal-header-actions">
-          <Link className="button button-secondary" href="/portal/messages">
-            Messages
-          </Link>
+          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <h1 className="max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
+                Tattoo Portal.
+              </h1>
 
-          <Link className="button button-secondary" href="/portal/credit">
-            Credit
-          </Link>
+              <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
+                Welcome back
+                {clientProfile?.clientName ? `, ${clientProfile.clientName}` : ""}.
+                View your messages, appointments, tattoo projects, In-Studio
+                Credit, membership offers, and studio updates.
+              </p>
+            </div>
 
-          <Link className="button button-secondary" href="/portal/appointments">
-            Appointments
-          </Link>
-          <Link className="button button-secondary" href="/portal/project-timeline">
-            Timeline
-          </Link>
+            <div className="flex flex-wrap gap-3 lg:justify-end">
+              <Link className="button button-primary" href="/portal/messages">
+                Open Messages
+              </Link>
 
-          <Link
-            className="button button-secondary"
-            href="/portal/membership-offers"
-          >
-            Membership Offers
-          </Link>
+              <button
+                className="button button-secondary"
+                type="button"
+                onClick={handleLogout}
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
 
-          <Link className="button button-secondary" href="/consult">
-            New Consult
-          </Link>
-
-          <button
-            className="button button-secondary"
-            type="button"
-            onClick={async () => {
-              await signOut(auth);
-              router.push("/tattoo-portal");
-            }}
-          >
-            Log Out
-          </button>
-        </div>
-      </section>
-
-      {loadError && <p className="error-message">{loadError}</p>}
-
-      <section className="dashboard-hero-grid">
-        <article className="dashboard-credit-card">
-          <p>Current In-Studio Credit</p>
-          <strong>{formatMoneyFromCents(creditSummary.balanceCents)}</strong>
-          <span>
-            Added {formatMoneyFromCents(creditSummary.creditAddedCents)} · Used{" "}
-            {formatMoneyFromCents(creditSummary.creditUsedCents)}
-          </span>
-
-          <Link className="button button-primary" href="/portal/credit">
-            View Credit History
-          </Link>
-        </article>
-
-        <article className="dashboard-status-card">
-          <p className="eyebrow">Membership Status</p>
-          <h2>{getMembershipOfferStatus(latestMembershipApplication)}</h2>
-
-          {latestMembershipApplication?.membershipOffer ? (
-            <p>
-              Offer:{" "}
-              <strong>
-                {latestMembershipApplication.membershipOffer.tierLabel ||
-                  formatValue(latestMembershipApplication.membershipOffer.tier)}
-              </strong>
+          {errorMessage ? (
+            <p className="mt-6 rounded-[1rem] border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold leading-7 text-red-100">
+              {errorMessage}
             </p>
-          ) : (
-            <p>No current membership offer on file.</p>
-          )}
+          ) : null}
 
-          <div className="dashboard-card-actions">
-            <Link
-              className="button button-secondary"
-              href="/portal/membership-offers"
-            >
-              View Offers
-            </Link>
+          <div className="mt-8 grid gap-4 md:grid-cols-4">
+            <article className="rounded-[1.5rem] border border-[#0000cc]/60 bg-[#0000cc]/15 p-5 shadow-[0_0_35px_rgba(0,0,204,0.18)]">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                In-Studio Credit
+              </p>
 
-            <Link
-              className="button button-secondary"
-              href="/tattoo-project-membership"
-            >
-              Apply
-            </Link>
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                {formatMoney(creditBalance)}
+              </h2>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                Recorded account value based on visible payment records.
+              </p>
+            </article>
+
+            <article className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                Projects
+              </p>
+
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                {projects.length}
+              </h2>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                Tattoo project records connected to your account.
+              </p>
+            </article>
+
+            <article className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                Appointments
+              </p>
+
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                {appointments.length}
+              </h2>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                Studio-booked appointments and sessions.
+              </p>
+            </article>
+
+            <article className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                Offers
+              </p>
+
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                {offers.length}
+              </h2>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                Membership offers or studio proposals.
+              </p>
+            </article>
           </div>
-        </article>
+        </div>
       </section>
 
-      <section className="portal-dashboard-grid dashboard-tight-grid">
-        <article className="portal-stat-card">
-          <p>Unread Messages</p>
-          <strong>{unreadConversations.length}</strong>
-        </article>
+      <section className="mx-auto max-w-7xl px-5 py-10 md:px-8 md:py-14">
+        <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+          Tattoo Portal Tools
+        </p>
 
-        <article className="portal-stat-card">
-          <p>Upcoming Appointments</p>
-          <strong>{upcomingAppointments.length}</strong>
-        </article>
+        <h2 className="mt-4 max-w-5xl text-4xl font-black leading-[0.95] tracking-[-0.06em] text-white md:text-6xl">
+          Your studio account.
+        </h2>
 
-        <article className="portal-stat-card">
-          <p>Active Projects</p>
-          <strong>{activeProjects.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Membership Requests</p>
-          <strong>{membershipChangeRequests.length}</strong>
-        </article>
-      </section>
-
-      <section className="dashboard-overview-layout">
-        <article className="portal-card dashboard-overview-card">
-          <div className="panel-heading">
-            <h2>Upcoming Appointments</h2>
-            <p>{upcomingAppointments.length}</p>
-          </div>
-
-          {upcomingAppointments.length === 0 ? (
-            <p>No upcoming appointments yet.</p>
-          ) : (
-            <div className="mini-record-list">
-              {upcomingAppointments.slice(0, 3).map((appointment) => (
-                <div key={appointment.id} className="mini-record-card">
-                  <strong>{appointment.title || "Studio Appointment"}</strong>
-                  <span>{formatDate(appointment.startAt)}</span>
-                  <span>
-                    {formatValue(appointment.appointmentType)} ·{" "}
-                    {formatValue(appointment.status)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="portal-card-action">
-            <Link className="button button-secondary" href="/portal/appointments">
-              View Appointments
-            </Link>
-          </div>
-        </article>
-
-        <article className="portal-card dashboard-overview-card">
-          <div className="panel-heading">
-            <h2>Messages</h2>
-            <p>{conversations.length}</p>
-          </div>
-
-          {conversations.length === 0 ? (
-            <p>No conversations yet.</p>
-          ) : (
-            <div className="mini-record-list">
-              {conversations
-                .slice()
-                .sort(
-                  (a, b) =>
-                    timestampToMillis(b.lastMessageAt) -
-                    timestampToMillis(a.lastMessageAt)
-                )
-                .slice(0, 3)
-                .map((conversation) => (
-                  <div key={conversation.id} className="mini-record-card">
-                    <strong>{conversation.subject || "Studio Message"}</strong>
-                    <span>
-                      {conversation.lastMessagePreview ||
-                        "No preview available"}
-                    </span>
-                    <span>{formatDate(conversation.lastMessageAt)}</span>
-                  </div>
-                ))}
-            </div>
-          )}
-
-          <div className="portal-card-action">
-            <Link className="button button-secondary" href="/portal/messages">
-              Open Messages
-            </Link>
-          </div>
-        </article>
-
-        <article className="portal-card dashboard-overview-card">
-          <div className="panel-heading">
-            <h2>Membership Offer Response</h2>
-            <p>{offerResponses.length}</p>
-          </div>
-
-          {latestOfferResponse ? (
-            <div className="mini-record-list">
-              <div className="mini-record-card">
-                <strong>{formatValue(latestOfferResponse.responseType)}</strong>
-                <span>Status: {formatValue(latestOfferResponse.responseStatus)}</span>
-                <span>{formatDate(latestOfferResponse.createdAt)}</span>
-              </div>
-            </div>
-          ) : (
-            <p>No membership offer responses yet.</p>
-          )}
-
-          <div className="portal-card-action">
+        <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {portalCards.map((card) => (
             <Link
-              className="button button-secondary"
-              href="/portal/membership-offers"
+              key={card.title}
+              href={card.href}
+              className="group rounded-[1.6rem] border border-white/10 bg-white/[0.045] p-5 text-white no-underline transition hover:-translate-y-1 hover:border-[#0000cc]/70 hover:bg-[#0000cc]/15 md:p-7"
             >
-              View Membership Offers
-            </Link>
-          </div>
-        </article>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <h3 className="text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                  {card.title}
+                </h3>
 
-        <article className="portal-card dashboard-overview-card">
-          <div className="panel-heading">
-            <h2>Payment Change Requests</h2>
-            <p>{membershipChangeRequests.length}</p>
-          </div>
-
-          {latestMembershipChangeRequest ? (
-            <div className="mini-record-list">
-              <div className="mini-record-card">
-                <strong>{formatValue(latestMembershipChangeRequest.requestType)}</strong>
-                <span>
-                  Status:{" "}
-                  {formatValue(latestMembershipChangeRequest.requestStatus)}
+                <span className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white shadow-[0_0_24px_rgba(0,0,204,0.25)]">
+                  {card.label}
                 </span>
-                <span>{formatDate(latestMembershipChangeRequest.createdAt)}</span>
               </div>
-            </div>
-          ) : (
-            <p>No payment change requests yet.</p>
-          )}
 
-          <div className="portal-card-action">
-            <Link className="button button-secondary" href="/portal/credit">
-              Request Pause / Cancel
+              <p className="mt-5 text-base font-semibold leading-8 text-white/68">
+                {card.description}
+              </p>
             </Link>
-          </div>
-        </article>
+          ))}
+        </div>
+      </section>
 
-        <article className="portal-card dashboard-overview-card">
-          <div className="panel-heading">
-            <h2>Projects</h2>
-            <p>{projects.length}</p>
-          </div>
+      <section className="border-t border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-10 md:px-8">
+          <div className="grid gap-5 rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 md:grid-cols-[1fr_auto] md:items-center md:p-8">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                Need something new?
+              </p>
 
-          {projects.length === 0 ? (
-            <p>No tattoo projects have been created yet.</p>
-          ) : (
-            <div className="mini-record-list">
-              {projects.slice(0, 3).map((project) => (
-                <div key={project.id} className="mini-record-card">
-                  <strong>{project.projectName || "Tattoo Project"}</strong>
-                  <span>Status: {formatValue(project.status)}</span>
-                  <span>Created: {formatDate(project.createdAt)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </article>
+              <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-white md:text-5xl">
+                Start a new consult or review pricing.
+              </h2>
 
-        <article className="portal-card dashboard-overview-card">
-          <div className="panel-heading">
-            <h2>Latest Activity</h2>
-            <p>{latestActivityMillis ? "Updated" : "None"}</p>
-          </div>
-
-          <div className="mini-record-list">
-            <div className="mini-record-card">
-              <strong>Last Account Activity</strong>
-              <span>
-                {latestActivityMillis
-                  ? new Date(latestActivityMillis).toLocaleString("en-CA", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })
-                  : "No activity yet"}
-              </span>
+              <p className="mt-4 max-w-3xl text-base font-semibold leading-8 text-white/70">
+                Submit a new tattoo request, review current pricing, or return
+                to the public website.
+              </p>
             </div>
 
-            <div className="mini-record-card">
-              <strong>Need help?</strong>
-              <span>
-                Message the studio if anything looks incorrect or if you need
-                help with your project.
-              </span>
+            <div className="flex flex-wrap gap-3 md:justify-end">
+              <Link className="button button-primary" href="/consult">
+                Start Free Consult
+              </Link>
+
+              <Link className="button button-secondary" href="/pricing">
+                View Pricing
+              </Link>
+
+              <Link className="button button-secondary" href="/">
+                Back to Website
+              </Link>
             </div>
           </div>
-
-          <div className="portal-card-action">
-            <Link className="button button-primary" href="/portal/messages">
-              Message the Studio
-            </Link>
-          </div>
-        </article>
+        </div>
       </section>
     </main>
   );
