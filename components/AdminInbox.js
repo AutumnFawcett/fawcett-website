@@ -39,6 +39,21 @@ const inboxes = [
   },
 ];
 
+const adminLinks = [
+  { title: "Dashboard", href: "/admin/dashboard" },
+  { title: "Intake", href: "/admin/intake" },
+  { title: "Clients", href: "/admin/clients" },
+  { title: "Applications", href: "/admin/applications" },
+  { title: "Consults", href: "/admin/consults" },
+  { title: "Schedule", href: "/admin/schedule" },
+  { title: "Timeline", href: "/admin/project-timeline" },
+  { title: "Payments", href: "/admin/payments" },
+  { title: "Credit Ledger", href: "/admin/credit-ledger" },
+  { title: "Membership Offers", href: "/admin/membership-offers" },
+  { title: "Membership Requests", href: "/admin/membership-requests" },
+  { title: "Offer Responses", href: "/admin/membership-offer-responses" },
+];
+
 function timestampToMillis(timestamp) {
   if (!timestamp) return 0;
 
@@ -58,6 +73,12 @@ function formatDate(timestamp) {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function getInboxLabel(inbox) {
+  if (inbox === "ben") return "Ben";
+  if (inbox === "autumn") return "Autumn";
+  return "General";
 }
 
 export default function AdminInbox() {
@@ -83,6 +104,11 @@ export default function AdminInbox() {
   const selectedInboxLabel = useMemo(() => {
     return inboxes.find((inbox) => inbox.id === activeInbox)?.label || "Inbox";
   }, [activeInbox]);
+
+  const unreadCount = useMemo(() => {
+    return conversations.filter((conversation) => conversation.unreadForAdmin)
+      .length;
+  }, [conversations]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -112,71 +138,72 @@ export default function AdminInbox() {
     return () => unsubscribe();
   }, []);
 
-useEffect(() => {
-  if (!user || !isAdmin) return;
+  useEffect(() => {
+    if (!user || !isAdmin) return;
 
-  const conversationsQuery = query(
-    collection(db, "conversations"),
-    where("assignedInbox", "==", activeInbox)
-  );
+    const conversationsQuery = query(
+      collection(db, "conversations"),
+      where("assignedInbox", "==", activeInbox)
+    );
 
-  const unsubscribe = onSnapshot(
-    conversationsQuery,
-    (snapshot) => {
-      const nextConversations = snapshot.docs
-        .map((conversationDoc) => ({
-          id: conversationDoc.id,
-          ...conversationDoc.data(),
-        }))
-        .sort(
-          (a, b) =>
-            timestampToMillis(b.lastMessageAt) -
-            timestampToMillis(a.lastMessageAt)
-        );
+    const unsubscribe = onSnapshot(
+      conversationsQuery,
+      (snapshot) => {
+        const nextConversations = snapshot.docs
+          .map((conversationDoc) => ({
+            id: conversationDoc.id,
+            ...conversationDoc.data(),
+          }))
+          .sort(
+            (a, b) =>
+              timestampToMillis(b.lastMessageAt) -
+              timestampToMillis(a.lastMessageAt)
+          );
 
-      setConversations(nextConversations);
-      setActionError("");
-    },
-    (error) => {
-      console.error(error);
-      setActionError("Could not load conversations. Check Firestore rules.");
-    }
-  );
+        setConversations(nextConversations);
+        setActionError("");
+      },
+      (error) => {
+        console.error(error);
+        setActionError("Could not load conversations. Check Firestore rules.");
+      }
+    );
 
-  return () => unsubscribe();
-}, [activeInbox, user, isAdmin]);
-useEffect(() => {
-  if (!selectedConversation) return;
+    return () => unsubscribe();
+  }, [activeInbox, user, isAdmin]);
 
-  const messagesQuery = query(
-    collection(db, "messages"),
-    where("conversationId", "==", selectedConversation.id)
-  );
+  useEffect(() => {
+    if (!selectedConversation) return;
 
-  const unsubscribe = onSnapshot(
-    messagesQuery,
-    (snapshot) => {
-      const nextMessages = snapshot.docs
-        .map((messageDoc) => ({
-          id: messageDoc.id,
-          ...messageDoc.data(),
-        }))
-        .sort(
-          (a, b) =>
-            timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt)
-        );
+    const messagesQuery = query(
+      collection(db, "messages"),
+      where("conversationId", "==", selectedConversation.id)
+    );
 
-      setMessages(nextMessages);
-      setActionError("");
-    },
-    (error) => {
-      console.error(error);
-      setActionError("Could not load messages.");
-    }
-  );
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      (snapshot) => {
+        const nextMessages = snapshot.docs
+          .map((messageDoc) => ({
+            id: messageDoc.id,
+            ...messageDoc.data(),
+          }))
+          .sort(
+            (a, b) =>
+              timestampToMillis(a.createdAt) - timestampToMillis(b.createdAt)
+          );
 
-  return () => unsubscribe();
-}, [selectedConversation]);
+        setMessages(nextMessages);
+        setActionError("");
+      },
+      (error) => {
+        console.error(error);
+        setActionError("Could not load messages.");
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedConversation]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -190,8 +217,18 @@ useEffect(() => {
     }
   }
 
+  function handleInboxChange(nextInbox) {
+    setActiveInbox(nextInbox);
+    setSelectedConversation(null);
+    setMessages([]);
+    setActionError("");
+  }
+
   async function handleSelectConversation(conversation) {
-    setSelectedConversation(conversation);
+    setSelectedConversation({
+      ...conversation,
+      unreadForAdmin: false,
+    });
     setActionError("");
 
     if (!conversation.unreadForAdmin) return;
@@ -267,6 +304,8 @@ useEffect(() => {
     setActionError("");
 
     try {
+      const body = replyText.trim();
+
       await addDoc(collection(db, "messages"), {
         conversationId: selectedConversation.id,
         applicationId: selectedConversation.applicationId || null,
@@ -274,9 +313,9 @@ useEffect(() => {
 
         senderUid: user.uid,
         senderRole: "admin",
-        senderName: user.displayName || "Fawcett Tattoo & Art Studio",
+        senderName: "Fawcett Tattoos & Art Studio",
 
-        body: replyText.trim(),
+        body,
 
         createdAt: serverTimestamp(),
       });
@@ -284,7 +323,7 @@ useEffect(() => {
       const conversationRef = doc(db, "conversations", selectedConversation.id);
 
       await updateDoc(conversationRef, {
-        lastMessagePreview: replyText.trim().slice(0, 140),
+        lastMessagePreview: body.slice(0, 140),
         lastMessageAt: serverTimestamp(),
         unreadForAdmin: false,
         unreadForClient: true,
@@ -302,9 +341,11 @@ useEffect(() => {
 
   if (!adminChecked) {
     return (
-      <main className="admin-page">
-        <section className="admin-card">
-          <p>Checking admin access...</p>
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-sm font-black uppercase tracking-[0.28em] text-white/45">
+            Checking admin access...
+          </p>
         </section>
       </main>
     );
@@ -312,38 +353,68 @@ useEffect(() => {
 
   if (!user) {
     return (
-      <main className="admin-page">
-        <section className="admin-card admin-login-card">
-          <p className="eyebrow">Admin Login</p>
-          <h1>Fawcett Admin Inbox</h1>
+      <main className="min-h-screen bg-black text-white">
+        <section className="border-b border-white/10">
+          <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+            <Link href="/" className="text-sm text-white/60 hover:text-white">
+              ← Back to Website
+            </Link>
 
-          <form className="admin-form" onSubmit={handleLogin}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
+            <p className="mt-8 text-xs uppercase tracking-[0.32em] text-white/45">
+              Admin Login
+            </p>
 
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
+            <h1 className="mt-4 max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
+              Fawcett Admin Inbox
+            </h1>
 
-            {authError && <p className="error-message">{authError}</p>}
+            <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
+              Log in with an approved admin account to review Tattoo Portal
+              messages and assigned conversations.
+            </p>
+          </div>
+        </section>
 
-            <button className="button button-primary" type="submit">
-              Log In
-            </button>
-          </form>
+        <section className="mx-auto max-w-3xl px-5 py-10 md:px-8 md:py-14">
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.055] p-5 shadow-[0_0_45px_rgba(0,0,204,0.12)] md:p-8">
+            <h2 className="text-3xl font-black tracking-[-0.05em] text-white md:text-4xl">
+              Admin Login
+            </h2>
+
+            <form className="mt-6 grid gap-5" onSubmit={handleLogin}>
+              <label className="grid gap-2 text-sm font-black text-white/80">
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  className="min-h-14 rounded-[1rem] border border-white/10 bg-black/45 px-4 text-white outline-none transition placeholder:text-white/30 focus:border-[#0000cc]"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-black text-white/80">
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  className="min-h-14 rounded-[1rem] border border-white/10 bg-black/45 px-4 text-white outline-none transition placeholder:text-white/30 focus:border-[#0000cc]"
+                />
+              </label>
+
+              {authError ? (
+                <p className="rounded-[1rem] border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold leading-7 text-red-100">
+                  {authError}
+                </p>
+              ) : null}
+
+              <button className="button button-primary w-full" type="submit">
+                Log In
+              </button>
+            </form>
+          </div>
         </section>
       </main>
     );
@@ -351,235 +422,311 @@ useEffect(() => {
 
   if (!isAdmin) {
     return (
-      <main className="admin-page">
-        <section className="admin-card">
-          <p className="eyebrow">Access Denied</p>
-          <h1>This account is not an admin.</h1>
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-3xl px-5 py-12 md:px-8 md:py-16">
+          <div className="rounded-[2rem] border border-red-400/25 bg-red-500/10 p-5 md:p-8">
+            <p className="text-sm font-black uppercase tracking-[0.28em] text-red-100/60">
+              Access Denied
+            </p>
 
-          <p>
-            Add this user’s Firebase UID to the <strong>adminUsers</strong>{" "}
-            collection in Firestore, then refresh.
-          </p>
+            <h1 className="mt-4 text-4xl font-black tracking-[-0.06em] text-white md:text-6xl">
+              This account is not an admin.
+            </h1>
 
-          <p>
-            Current user: <strong>{user.email}</strong>
-          </p>
+            <p className="mt-5 text-base font-semibold leading-8 text-red-50/75">
+              Add this user’s Firebase UID to the{" "}
+              <strong>adminUsers</strong> collection in Firestore, then refresh.
+            </p>
 
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={async () => {
-            await signOut(auth);
-            router.push("/tattoo-portal");
-          }}
-        >
-          Log Out
-        </button>
+            <p className="mt-4 text-base font-semibold leading-8 text-red-50/75">
+              Current user: <strong>{user.email}</strong>
+            </p>
+
+            <button
+              className="button button-secondary mt-6"
+              type="button"
+              onClick={async () => {
+                await signOut(auth);
+                router.push("/tattoo-portal");
+              }}
+            >
+              Log Out
+            </button>
+          </div>
         </section>
       </main>
     );
   }
 
   return (
-    <main className="admin-page">
-      <section className="admin-header">
-        <div>
-          <p className="eyebrow">Admin</p>
-          <h1>Inbox</h1>
-          <p>
-            Review general questions, move clients to Ben or Autumn, and reply
-            to message-style consults.
+    <main className="min-h-screen bg-black text-white">
+      <section className="border-b border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+            Admin
           </p>
-        </div>
 
-        <div className="admin-header-actions">
+          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <h1 className="max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
+                Inbox
+              </h1>
 
-       <Link className="button button-secondary" href="/admin/intake">
-          Intake
-       </Link>
-       <Link className="button button-secondary" href="/admin/clients">
-          Clients
-        </Link>
-        <Link className="button button-secondary" href="/admin/applications">
-            Applications
-        </Link>
-        <Link className="button button-secondary" href="/admin/consults">
-            Consults
-        </Link>
-        <Link className="button button-secondary" href="/admin/schedule">
-          Schedule
-        </Link>
-        <Link className="button button-secondary" href="/admin/project-timeline">
-          Timeline
-        </Link>
-        <Link className="button button-secondary" href="/admin/payments">
-          Payments
-        </Link>
-        <Link className="button button-secondary" href="/admin/credit-ledger">
-          Credit Ledger
-        </Link>
-        <Link className="button button-secondary" href="/admin/membership-offers">
-          Membership Offers
-        </Link>
-        <Link className="button button-secondary" href="/admin/membership-requests">
-          Membership Requests
-        </Link>
-        <Link className="button button-secondary" href="/admin/membership-offer-responses">
-          Offer Responses
-         </Link>
-         <Link className="button button-secondary" href="/admin/dashboard">
-            Dashboard
-         </Link>
+              <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
+                Review general questions, move clients to Ben or Autumn, and
+                reply to message-style consults.
+              </p>
+            </div>
 
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={async () => {
-            await signOut(auth);
-            router.push("/tattoo-portal");
-          }}
-        >
-          Log Out
-        </button>
+            <div className="grid gap-3 sm:flex sm:flex-wrap lg:justify-end">
+              {adminLinks.map((link) => (
+                <Link
+                  key={link.title}
+                  className={
+                    link.href === "/admin/dashboard"
+                      ? "button button-primary justify-center"
+                      : "button button-secondary justify-center"
+                  }
+                  href={link.href}
+                >
+                  {link.title}
+                </Link>
+              ))}
+
+              <button
+                className="button button-secondary justify-center"
+                type="button"
+                onClick={async () => {
+                  await signOut(auth);
+                  router.push("/tattoo-portal");
+                }}
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {inboxes.map((inbox) => (
+              <button
+                key={inbox.id}
+                type="button"
+                onClick={() => handleInboxChange(inbox.id)}
+                className={
+                  activeInbox === inbox.id
+                    ? "rounded-[1.5rem] border border-[#0000cc]/70 bg-[#0000cc]/20 p-5 text-left shadow-[0_0_30px_rgba(0,0,204,0.22)]"
+                    : "rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5 text-left transition hover:border-[#0000cc]/50 hover:bg-[#0000cc]/10"
+                }
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                      Inbox
+                    </p>
+
+                    <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                      {inbox.label}
+                    </h2>
+                  </div>
+
+                  {activeInbox === inbox.id ? (
+                    <span className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white">
+                      Active
+                    </span>
+                  ) : null}
+                </div>
+
+                <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+                  {inbox.description}
+                </p>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="admin-inbox-layout">
-        <aside className="admin-sidebar">
-          {inboxes.map((inbox) => (
-          <button
-            key={inbox.id}
-            type="button"
-            onClick={() => setActiveInbox(inbox.id)}
-            className={
-              activeInbox === inbox.id
-                ? "inbox-card inbox-card-active"
-                : "inbox-card"
-            }
-          >
-            <span>{inbox.label}</span>
-            <small>{inbox.description}</small>
-          </button>
-          ))}
-        </aside>
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-10 md:px-8 md:py-14 xl:grid-cols-[0.45fr_1fr]">
+        <aside className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 md:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                Selected Inbox
+              </p>
 
-        <section className="conversation-list-panel">
-          <div className="panel-heading">
-            <h2>{selectedInboxLabel}</h2>
-            <p>{conversations.length} conversation(s)</p>
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                {selectedInboxLabel}
+              </h2>
+
+              <p className="mt-3 text-sm font-bold leading-7 text-white/58">
+                {conversations.length} conversation(s)
+              </p>
+            </div>
+
+            {unreadCount > 0 ? (
+              <p className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-5 py-2.5 text-lg font-black tracking-[-0.04em] text-white shadow-[0_0_30px_rgba(0,0,204,0.3)]">
+                {unreadCount} unread
+              </p>
+            ) : null}
           </div>
 
-          {actionError && <p className="error-message">{actionError}</p>}
+          {actionError ? (
+            <p className="mt-5 rounded-[1rem] border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold leading-7 text-red-100">
+              {actionError}
+            </p>
+          ) : null}
 
           {conversations.length === 0 ? (
-            <p>No conversations in this inbox yet.</p>
+            <div className="mt-6 rounded-[1.25rem] border border-white/10 bg-black/35 p-5">
+              <p className="text-base font-semibold leading-8 text-white/68">
+                No conversations in this inbox yet.
+              </p>
+            </div>
           ) : (
-            <div className="conversation-list">
+            <div className="mt-6 grid gap-3">
               {conversations.map((conversation) => (
                 <button
                   key={conversation.id}
                   type="button"
                   className={
                     selectedConversation?.id === conversation.id
-                      ? "conversation-card conversation-card-active"
-                      : "conversation-card"
+                      ? "rounded-[1.25rem] border border-[#0000cc]/70 bg-[#0000cc]/20 p-4 text-left shadow-[0_0_28px_rgba(0,0,204,0.18)]"
+                      : "rounded-[1.25rem] border border-white/10 bg-black/35 p-4 text-left transition hover:border-[#0000cc]/50 hover:bg-[#0000cc]/10"
                   }
                   onClick={() => handleSelectConversation(conversation)}
                 >
-                  <strong>
-                    {conversation.clientName || "Unnamed client"}
-                  </strong>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <strong className="text-base font-black text-white">
+                      {conversation.clientName || "Unnamed client"}
+                    </strong>
 
-                  <span>{conversation.clientEmail}</span>
+                    {conversation.unreadForAdmin ? (
+                      <span className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-3 py-1 text-xs font-black text-white">
+                        Unread
+                      </span>
+                    ) : null}
+                  </div>
 
-                  <p>
+                  <p className="mt-2 text-sm font-bold text-white/50">
+                    {conversation.clientEmail || "No email"}
+                  </p>
+
+                  <p className="mt-3 line-clamp-2 text-sm font-semibold leading-6 text-white/62">
                     {conversation.lastMessagePreview ||
                       "No message preview available."}
                   </p>
 
-                  <small>{formatDate(conversation.lastMessageAt)}</small>
-
-                  {conversation.unreadForAdmin && (
-                    <small className="unread-pill">Unread</small>
-                  )}
+                  <small className="mt-3 block text-xs font-bold text-white/38">
+                    {formatDate(conversation.lastMessageAt)}
+                  </small>
                 </button>
               ))}
             </div>
           )}
-        </section>
+        </aside>
 
-        <section className="message-panel">
+        <section className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 md:p-7">
           {!selectedConversation ? (
-            <div className="empty-state">
-              <h2>Select a conversation</h2>
-              <p>
+            <div className="rounded-[1.5rem] border border-white/10 bg-black/35 p-5 md:p-8">
+              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                Message Thread
+              </p>
+
+              <h2 className="mt-4 text-3xl font-black tracking-[-0.05em] text-white md:text-5xl">
+                Select a conversation.
+              </h2>
+
+              <p className="mt-5 max-w-2xl text-base font-semibold leading-8 text-white/68">
                 Choose a client conversation from the list to read and reply.
               </p>
             </div>
           ) : (
             <>
-              <div className="message-panel-header">
-                <div>
-                  <h2>{selectedConversation.clientName}</h2>
-                  <p>{selectedConversation.clientEmail}</p>
-                  <p>Status: {selectedConversation.status || "new"}</p>
-                  <p>Inbox: {selectedConversation.assignedInbox}</p>
-                </div>
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/35 p-5">
+                <div className="grid gap-5 xl:grid-cols-[1fr_auto] xl:items-start">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                      Message Thread
+                    </p>
 
-                <div className="move-buttons">
-                  <button
-                    className="button button-small"
-                    type="button"
-                    onClick={() => moveConversation("general")}
-                  >
-                    Move to General
-                  </button>
+                    <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                      {selectedConversation.clientName || "Unnamed client"}
+                    </h2>
 
-                  <button
-                    className="button button-small"
-                    type="button"
-                    onClick={() => moveConversation("ben")}
-                  >
-                    Move to Ben
-                  </button>
+                    <p className="mt-3 text-sm font-bold leading-7 text-white/58">
+                      {selectedConversation.clientEmail || "No email"}
+                    </p>
 
-                  <button
-                    className="button button-small"
-                    type="button"
-                    onClick={() => moveConversation("autumn")}
-                  >
-                    Move to Autumn
-                  </button>
+                    <p className="text-sm font-bold leading-7 text-white/58">
+                      Status: {selectedConversation.status || "new"}
+                    </p>
+
+                    <p className="text-sm font-bold leading-7 text-white/58">
+                      Inbox:{" "}
+                      {getInboxLabel(selectedConversation.assignedInbox)}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2 sm:flex sm:flex-wrap xl:justify-end">
+                    <button
+                      className="button button-secondary justify-center"
+                      type="button"
+                      onClick={() => moveConversation("general")}
+                    >
+                      Move to General
+                    </button>
+
+                    <button
+                      className="button button-secondary justify-center"
+                      type="button"
+                      onClick={() => moveConversation("ben")}
+                    >
+                      Move to Ben
+                    </button>
+
+                    <button
+                      className="button button-secondary justify-center"
+                      type="button"
+                      onClick={() => moveConversation("autumn")}
+                    >
+                      Move to Autumn
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="message-thread">
+              <div className="mt-5 grid max-h-[620px] gap-4 overflow-y-auto rounded-[1.5rem] border border-white/10 bg-black/30 p-4">
                 {messages.length === 0 ? (
-                  <p>No messages yet.</p>
+                  <p className="text-base font-semibold leading-8 text-white/62">
+                    No messages yet.
+                  </p>
                 ) : (
                   messages.map((message) => (
                     <article
                       key={message.id}
                       className={
-                        message.senderRole === "client"
-                          ? "message-bubble client-message"
-                          : "message-bubble admin-message"
+                        message.senderRole === "admin"
+                          ? "ml-auto max-w-[88%] rounded-[1.25rem] border border-[#0000cc]/60 bg-[#0000cc]/20 p-4 text-right shadow-[0_0_24px_rgba(0,0,204,0.16)]"
+                          : "mr-auto max-w-[88%] rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-4 text-left"
                       }
                     >
-                      <strong>
+                      <strong className="text-sm font-black text-white">
                         {message.senderName || message.senderRole}
                       </strong>
 
-                      <p>{message.body}</p>
+                      <p className="mt-3 whitespace-pre-wrap text-base font-semibold leading-8 text-white/72">
+                        {message.body}
+                      </p>
 
-                      <small>{formatDate(message.createdAt)}</small>
+                      <small className="mt-3 block text-xs font-bold text-white/40">
+                        {formatDate(message.createdAt)}
+                      </small>
                     </article>
                   ))
                 )}
               </div>
 
-              <form className="reply-form" onSubmit={sendReply}>
-                <label>
+              <form className="mt-5 grid gap-4" onSubmit={sendReply}>
+                <label className="grid gap-2 text-sm font-black text-white/80">
                   Reply
                   <textarea
                     value={replyText}
@@ -587,11 +734,12 @@ useEffect(() => {
                     rows={4}
                     placeholder="Write your reply..."
                     required
+                    className="min-h-32 rounded-[1rem] border border-white/10 bg-black/45 p-4 text-white outline-none transition placeholder:text-white/30 focus:border-[#0000cc]"
                   />
                 </label>
 
                 <button
-                  className="button button-primary"
+                  className="button button-primary w-full"
                   type="submit"
                   disabled={isSending}
                 >

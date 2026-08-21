@@ -81,20 +81,62 @@ function getCreditDeltaCents(payment) {
   return 0;
 }
 
-function getProjectStatusClass(status) {
+function getProjectStatusBadgeClass(status) {
   if (status === "active" || status === "approved") {
-    return "client-project-pill client-project-pill-good";
+    return "rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white";
   }
 
   if (status === "paused" || status === "consult_needed") {
-    return "client-project-pill client-project-pill-watch";
+    return "rounded-full border border-yellow-400/30 bg-yellow-500/10 px-4 py-2 text-sm font-black text-yellow-100";
   }
 
   if (status === "cancelled" || status === "declined") {
-    return "client-project-pill client-project-pill-bad";
+    return "rounded-full border border-red-400/30 bg-red-500/10 px-4 py-2 text-sm font-black text-red-100";
   }
 
-  return "client-project-pill";
+  if (status === "completed") {
+    return "rounded-full border border-green-400/30 bg-green-500/10 px-4 py-2 text-sm font-black text-green-100";
+  }
+
+  return "rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white/75";
+}
+
+function MiniCard({ title, value }) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-black/35 p-4">
+      <p className="text-xs uppercase tracking-[0.2em] text-white/40">
+        {title}
+      </p>
+
+      <p className="mt-3 text-base font-black leading-7 text-white/75">
+        {value}
+      </p>
+    </article>
+  );
+}
+
+function StatCard({ title, value, description, featured }) {
+  return (
+    <article
+      className={
+        featured
+          ? "rounded-3xl border border-[#0000cc]/60 bg-[#0000cc]/15 p-5"
+          : "rounded-3xl border border-white/10 bg-white/[0.045] p-5"
+      }
+    >
+      <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+        {title}
+      </p>
+
+      <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+        {value}
+      </h2>
+
+      <p className="mt-3 text-sm font-bold leading-7 text-white/65">
+        {description}
+      </p>
+    </article>
+  );
 }
 
 export default function ClientProjects() {
@@ -337,9 +379,11 @@ export default function ClientProjects() {
 
   if (!authChecked) {
     return (
-      <main className="portal-page">
-        <section className="portal-card">
-          <p>Checking login...</p>
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-sm font-black uppercase tracking-[0.28em] text-white/45">
+            Checking Tattoo Portal login...
+          </p>
         </section>
       </main>
     );
@@ -347,351 +391,508 @@ export default function ClientProjects() {
 
   if (!user) {
     return (
-      <main className="portal-page">
-        <section className="portal-card portal-login-card">
-          <p className="eyebrow">Tattoo Portal</p>
-          <h1>Projects</h1>
+      <main className="min-h-screen bg-black text-white">
+        <section className="border-b border-white/10">
+          <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+            <Link href="/" className="text-sm text-white/60 hover:text-white">
+              ← Back to Website
+            </Link>
 
-          <p>Log in to view your tattoo project details and updates.</p>
+            <p className="mt-8 text-xs uppercase tracking-[0.32em] text-white/45">
+              Tattoo Portal
+            </p>
 
-          <form className="portal-form" onSubmit={handleLogin}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
+            <h1 className="mt-4 max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
+              Projects
+            </h1>
 
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
+            <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
+              Log in to view your tattoo project details and studio updates.
+            </p>
+          </div>
+        </section>
 
-            {authError && <p className="error-message">{authError}</p>}
+        <section className="mx-auto max-w-3xl px-5 py-10 md:px-8 md:py-14">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.055] p-5 md:p-8">
+            <h2 className="text-3xl font-black tracking-[-0.05em] text-white md:text-4xl">
+              Tattoo Portal Login
+            </h2>
 
-            <button className="button button-primary" type="submit">
-              Log In
-            </button>
-          </form>
+            <form className="mt-6 grid gap-5" onSubmit={handleLogin}>
+              <label className="grid gap-2 text-sm font-black text-white/80">
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  className="min-h-14 rounded-2xl border border-white/10 bg-black/45 px-4 text-white outline-none transition placeholder:text-white/30 focus:border-[#0000cc]"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-black text-white/80">
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  className="min-h-14 rounded-2xl border border-white/10 bg-black/45 px-4 text-white outline-none transition placeholder:text-white/30 focus:border-[#0000cc]"
+                />
+              </label>
+
+              {authError ? (
+                <p className="rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold leading-7 text-red-100">
+                  {authError}
+                </p>
+              ) : null}
+
+              <button className="button button-primary w-full" type="submit">
+                Log In
+              </button>
+            </form>
+          </div>
         </section>
       </main>
     );
   }
 
   return (
-    <main className="portal-page">
-      <section className="portal-header">
-        <div>
-          <p className="eyebrow">Tattoo Portal</p>
-          <h1>Projects</h1>
-
-          <p>
-            View your tattoo project status, upcoming appointments, payment
-            history, and client-visible studio updates.
+    <main className="min-h-screen bg-black text-white">
+      <section className="border-b border-white/10">
+        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
+          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
+            Tattoo Portal
           </p>
-        </div>
 
-        <div className="portal-header-actions">
-          <Link className="button button-secondary" href="/portal/dashboard">
-            Dashboard
-          </Link>
+          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <h1 className="max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
+                Projects
+              </h1>
 
-          <Link className="button button-secondary" href="/portal/messages">
-            Messages
-          </Link>
+              <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
+                View your tattoo project status, upcoming appointments, payment
+                history, and client-visible studio updates.
+              </p>
+            </div>
 
-          <Link
-            className="button button-secondary"
-            href="/portal/project-timeline"
-          >
-            Timeline
-          </Link>
+            <div className="grid gap-3 sm:flex sm:flex-wrap lg:justify-end">
+              <Link
+                className="button button-primary justify-center"
+                href="/portal/dashboard"
+              >
+                Dashboard
+              </Link>
 
-          <Link className="button button-secondary" href="/portal/appointments">
-            Appointments
-          </Link>
+              <Link
+                className="button button-secondary justify-center"
+                href="/portal/messages"
+              >
+                Messages
+              </Link>
 
-          <Link className="button button-secondary" href="/portal/credit">
-            Credit
-          </Link>
+              <Link
+                className="button button-secondary justify-center"
+                href="/portal/project-timeline"
+              >
+                Timeline
+              </Link>
 
-          <button
-            className="button button-secondary"
-            type="button"
-            onClick={async () => {
-              await signOut(auth);
-              router.push("/tattoo-portal");
-            }}
-          >
-            Log Out
-          </button>
+              <Link
+                className="button button-secondary justify-center"
+                href="/portal/appointments"
+              >
+                Appointments
+              </Link>
+
+              <Link
+                className="button button-secondary justify-center"
+                href="/portal/credit"
+              >
+                Credit
+              </Link>
+
+              <button
+                className="button button-secondary justify-center"
+                type="button"
+                onClick={async () => {
+                  await signOut(auth);
+                  router.push("/tattoo-portal");
+                }}
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
+
+          {loadError ? (
+            <p className="mt-6 rounded-2xl border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold leading-7 text-red-100">
+              {loadError}
+            </p>
+          ) : null}
+
+          <div className="mt-8 grid gap-4 md:grid-cols-4">
+            <StatCard
+              title="Projects"
+              value={projects.length}
+              description="Tattoo project records connected to your account."
+              featured
+            />
+
+            <StatCard
+              title="Selected Project Appointments"
+              value={upcomingProjectAppointments.length}
+              description="Upcoming appointments for the selected project."
+            />
+
+            <StatCard
+              title="Selected Project Payments"
+              value={formatMoneyFromCents(projectPaymentTotalCents)}
+              description="Recorded payments connected to the selected project."
+            />
+
+            <StatCard
+              title="In-Studio Credit"
+              value={formatMoneyFromCents(creditSummary.balanceCents)}
+              description="Recorded account credit based on visible payment records."
+            />
+          </div>
         </div>
       </section>
 
-      {loadError && <p className="error-message">{loadError}</p>}
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-10 md:px-8 md:py-14 xl:grid-cols-[0.42fr_1fr]">
+        <aside className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 md:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                Your Projects
+              </p>
 
-      <section className="client-project-summary-grid">
-        <article className="portal-stat-card">
-          <p>Projects</p>
-          <strong>{projects.length}</strong>
-        </article>
+              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white md:text-3xl">
+                Project List
+              </h2>
+            </div>
 
-        <article className="portal-stat-card">
-          <p>Upcoming Appointments</p>
-          <strong>{upcomingProjectAppointments.length}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>Project Payments</p>
-          <strong>{formatMoneyFromCents(projectPaymentTotalCents)}</strong>
-        </article>
-
-        <article className="portal-stat-card">
-          <p>In-Studio Credit</p>
-          <strong>{formatMoneyFromCents(creditSummary.balanceCents)}</strong>
-        </article>
-      </section>
-
-      <section className="client-project-layout">
-        <aside className="portal-card client-project-sidebar">
-          <div className="panel-heading">
-            <h2>Your Projects</h2>
-            <p>{sortedProjects.length}</p>
+            <p className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-5 py-2.5 text-lg font-black tracking-[-0.04em] text-white">
+              {sortedProjects.length}
+            </p>
           </div>
 
           {sortedProjects.length === 0 ? (
-            <div className="empty-state">
-              <h3>No projects yet.</h3>
-              <p>
-                Once the studio creates a project from your consult or membership
-                application, it will appear here.
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/35 p-5">
+              <h3 className="text-xl font-black tracking-[-0.04em] text-white">
+                No projects yet.
+              </h3>
+
+              <p className="mt-3 text-base font-semibold leading-8 text-white/68">
+                Once the studio creates a project from your consult or
+                membership application, it will appear here.
               </p>
+
+              <Link className="button button-primary mt-5 w-full" href="/consult">
+                Start New Consult
+              </Link>
             </div>
           ) : (
-            <div className="client-project-list">
+            <div className="mt-6 grid gap-3">
               {sortedProjects.map((project) => (
                 <button
                   key={project.id}
                   type="button"
                   className={
                     selectedProject?.id === project.id
-                      ? "client-project-button client-project-button-active"
-                      : "client-project-button"
+                      ? "rounded-2xl border border-[#0000cc]/70 bg-[#0000cc]/20 p-4 text-left"
+                      : "rounded-2xl border border-white/10 bg-black/35 p-4 text-left transition hover:border-[#0000cc]/50 hover:bg-[#0000cc]/10"
                   }
                   onClick={() => setSelectedProjectId(project.id)}
                 >
-                  <strong>{project.projectName || "Tattoo Project"}</strong>
-                  <span>{formatValue(project.status)}</span>
-                  <span>
+                  <strong className="block text-base font-black text-white">
+                    {project.projectName || "Tattoo Project"}
+                  </strong>
+
+                  <span className="mt-3 inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-white/65">
+                    {formatValue(project.status)}
+                  </span>
+
+                  <span className="mt-3 block text-sm font-bold leading-6 text-white/55">
                     Artist:{" "}
-                    {formatValue(
-                      project.preferredArtist || project.assignedInbox
-                    )}
+                    {formatValue(project.preferredArtist || project.assignedInbox)}
                   </span>
                 </button>
               ))}
             </div>
           )}
 
-          <div className="portal-card-action">
-            <Link className="button button-primary" href="/consult">
+          <div className="mt-6">
+            <Link className="button button-primary w-full" href="/consult">
               Start New Consult
             </Link>
           </div>
         </aside>
 
-        <section className="portal-card client-project-detail-card">
+        <section className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 md:p-7">
           {!selectedProject ? (
-            <div className="empty-state">
-              <h2>Select a project</h2>
-              <p>Choose a project to view details.</p>
+            <div className="rounded-3xl border border-white/10 bg-black/35 p-5 md:p-8">
+              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                Project Detail
+              </p>
+
+              <h2 className="mt-4 text-3xl font-black tracking-[-0.05em] text-white md:text-5xl">
+                Select a project.
+              </h2>
+
+              <p className="mt-5 max-w-2xl text-base font-semibold leading-8 text-white/68">
+                Choose a project to view details.
+              </p>
             </div>
           ) : (
             <>
-              <div className="client-project-detail-header">
-                <div>
-                  <p className="eyebrow">Project Detail</p>
-                  <h2>{selectedProject.projectName || "Tattoo Project"}</h2>
-                  <p>
-                    Created: {formatDate(selectedProject.createdAt)} · Updated:{" "}
-                    {formatDate(selectedProject.updatedAt)}
-                  </p>
-                </div>
+              <div className="rounded-3xl border border-white/10 bg-black/35 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                      Project Detail
+                    </p>
 
-                <span className={getProjectStatusClass(selectedProject.status)}>
-                  {formatValue(selectedProject.status)}
-                </span>
+                    <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-white md:text-5xl">
+                      {selectedProject.projectName || "Tattoo Project"}
+                    </h2>
+
+                    <p className="mt-4 text-base font-semibold leading-8 text-white/62">
+                      Created: {formatDate(selectedProject.createdAt)} ·
+                      Updated: {formatDate(selectedProject.updatedAt)}
+                    </p>
+                  </div>
+
+                  <span className={getProjectStatusBadgeClass(selectedProject.status)}>
+                    {formatValue(selectedProject.status)}
+                  </span>
+                </div>
               </div>
 
-              <section className="client-project-detail-grid">
-                <article className="mini-record-card">
-                  <strong>Artist / Inbox</strong>
-                  <span>
-                    {formatValue(
-                      selectedProject.preferredArtist ||
-                        selectedProject.assignedInbox ||
-                        "general"
-                    )}
-                  </span>
-                </article>
+              <section className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <MiniCard
+                  title="Artist / Inbox"
+                  value={formatValue(
+                    selectedProject.preferredArtist ||
+                      selectedProject.assignedInbox ||
+                      "general"
+                  )}
+                />
 
-                <article className="mini-record-card">
-                  <strong>Project Source</strong>
-                  <span>{formatValue(selectedProject.source)}</span>
-                </article>
+                <MiniCard
+                  title="Project Source"
+                  value={formatValue(selectedProject.source)}
+                />
 
-                <article className="mini-record-card">
-                  <strong>Placement</strong>
-                  <span>{formatValue(selectedProject.project?.placement)}</span>
-                </article>
+                <MiniCard
+                  title="Placement"
+                  value={formatValue(selectedProject.project?.placement)}
+                />
 
-                <article className="mini-record-card">
-                  <strong>Timeline</strong>
-                  <span>{formatValue(selectedProject.timeline?.startWindow)}</span>
-                </article>
+                <MiniCard
+                  title="Timeline"
+                  value={formatValue(selectedProject.timeline?.startWindow)}
+                />
               </section>
 
-              <section className="client-project-section">
-                <div className="panel-heading">
-                  <h2>Project Idea</h2>
-                  <p>Details</p>
-                </div>
+              <section className="mt-5 rounded-3xl border border-white/10 bg-black/35 p-5">
+                <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                  Project Idea
+                </p>
 
-                <div className="client-project-note-box">
+                <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                  Details
+                </h2>
+
+                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-base font-semibold leading-8 text-white/72">
                   {selectedProject.project?.tattooIdea ||
                     selectedProject.project?.idea ||
                     "No project description provided yet."}
                 </div>
               </section>
 
-              <section className="client-project-section">
-                <div className="panel-heading">
-                  <h2>Estimate Snapshot</h2>
-                  <p>Studio Review</p>
+              <section className="mt-5 rounded-3xl border border-white/10 bg-black/35 p-5">
+                <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                  Estimate Snapshot
+                </p>
+
+                <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                  Studio Review
+                </h2>
+
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <MiniCard
+                    title="Estimate Low"
+                    value={formatMoneyFromCents(
+                      selectedProject.estimate?.estimateLowCents
+                    )}
+                  />
+
+                  <MiniCard
+                    title="Estimate High"
+                    value={formatMoneyFromCents(
+                      selectedProject.estimate?.estimateHighCents
+                    )}
+                  />
+
+                  <MiniCard
+                    title="Estimated Sessions"
+                    value={
+                      selectedProject.estimate?.estimatedSessions ||
+                      "Not provided"
+                    }
+                  />
+
+                  <MiniCard
+                    title="Estimated Hours"
+                    value={
+                      selectedProject.estimate?.estimatedHours ||
+                      "Not provided"
+                    }
+                  />
                 </div>
-
-                <section className="client-project-detail-grid">
-                  <article className="mini-record-card">
-                    <strong>Estimate Low</strong>
-                    <span>
-                      {formatMoneyFromCents(
-                        selectedProject.estimate?.estimateLowCents
-                      )}
-                    </span>
-                  </article>
-
-                  <article className="mini-record-card">
-                    <strong>Estimate High</strong>
-                    <span>
-                      {formatMoneyFromCents(
-                        selectedProject.estimate?.estimateHighCents
-                      )}
-                    </span>
-                  </article>
-
-                  <article className="mini-record-card">
-                    <strong>Estimated Sessions</strong>
-                    <span>
-                      {selectedProject.estimate?.estimatedSessions ||
-                        "Not provided"}
-                    </span>
-                  </article>
-
-                  <article className="mini-record-card">
-                    <strong>Estimated Hours</strong>
-                    <span>
-                      {selectedProject.estimate?.estimatedHours ||
-                        "Not provided"}
-                    </span>
-                  </article>
-                </section>
               </section>
 
-              <section className="client-project-section">
-                <div className="panel-heading">
-                  <h2>Upcoming Appointments</h2>
-                  <p>{upcomingProjectAppointments.length}</p>
+              <section className="mt-5 rounded-3xl border border-white/10 bg-black/35 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                      Upcoming Appointments
+                    </p>
+
+                    <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                      Project Schedule
+                    </h2>
+                  </div>
+
+                  <p className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-5 py-2.5 text-lg font-black text-white">
+                    {upcomingProjectAppointments.length}
+                  </p>
                 </div>
 
                 {upcomingProjectAppointments.length === 0 ? (
-                  <p>No upcoming appointments for this project.</p>
+                  <p className="mt-5 text-base font-semibold leading-8 text-white/65">
+                    No upcoming appointments for this project.
+                  </p>
                 ) : (
-                  <div className="mini-record-list">
+                  <div className="mt-5 grid gap-3">
                     {upcomingProjectAppointments.map((appointment) => (
-                      <div key={appointment.id} className="mini-record-card">
-                        <strong>{appointment.title || "Appointment"}</strong>
-                        <span>{formatDate(appointment.startAt)}</span>
-                        <span>
+                      <article
+                        key={appointment.id}
+                        className="rounded-2xl border border-white/10 bg-white/[0.045] p-4"
+                      >
+                        <strong className="block text-base font-black text-white">
+                          {appointment.title || "Appointment"}
+                        </strong>
+
+                        <span className="mt-2 block text-sm font-bold leading-7 text-white/65">
+                          {formatDate(appointment.startAt)}
+                        </span>
+
+                        <span className="block text-sm font-bold leading-7 text-white/55">
                           {formatValue(appointment.appointmentType)} ·{" "}
                           {formatValue(appointment.status)}
                         </span>
-                      </div>
+                      </article>
                     ))}
                   </div>
                 )}
               </section>
 
-              <section className="client-project-section">
-                <div className="panel-heading">
-                  <h2>Related Payments</h2>
-                  <p>{projectPayments.length}</p>
+              <section className="mt-5 rounded-3xl border border-white/10 bg-black/35 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                      Related Payments
+                    </p>
+
+                    <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                      Payment Records
+                    </h2>
+                  </div>
+
+                  <p className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-lg font-black text-white">
+                    {projectPayments.length}
+                  </p>
                 </div>
 
                 {projectPayments.length === 0 ? (
-                  <p>No payments have been attached to this project yet.</p>
+                  <p className="mt-5 text-base font-semibold leading-8 text-white/65">
+                    No payments have been attached to this project yet.
+                  </p>
                 ) : (
-                  <div className="mini-record-list">
+                  <div className="mt-5 grid gap-3">
                     {projectPayments.slice(0, 5).map((payment) => (
-                      <div key={payment.id} className="mini-record-card">
-                        <strong>
+                      <article
+                        key={payment.id}
+                        className="rounded-2xl border border-white/10 bg-white/[0.045] p-4"
+                      >
+                        <strong className="block text-base font-black text-white">
                           {formatMoneyFromCents(payment.amountCents)}
                         </strong>
-                        <span>
+
+                        <span className="mt-2 block text-sm font-bold leading-7 text-white/65">
                           {formatValue(payment.paymentType)} ·{" "}
                           {formatValue(payment.paymentMethod)}
                         </span>
-                        <span>{formatDate(payment.receivedAt)}</span>
-                      </div>
+
+                        <span className="block text-sm font-bold leading-7 text-white/55">
+                          {formatDate(payment.receivedAt)}
+                        </span>
+                      </article>
                     ))}
                   </div>
                 )}
               </section>
 
-              <section className="client-project-section">
-                <div className="panel-heading">
-                  <h2>Client-Visible Updates</h2>
-                  <p>{projectTimeline.length}</p>
+              <section className="mt-5 rounded-3xl border border-white/10 bg-black/35 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-white/45">
+                      Client-Visible Updates
+                    </p>
+
+                    <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                      Studio Timeline
+                    </h2>
+                  </div>
+
+                  <p className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-lg font-black text-white">
+                    {projectTimeline.length}
+                  </p>
                 </div>
 
                 {projectTimeline.length === 0 ? (
-                  <p>No client-visible timeline updates for this project yet.</p>
+                  <p className="mt-5 text-base font-semibold leading-8 text-white/65">
+                    No client-visible timeline updates for this project yet.
+                  </p>
                 ) : (
-                  <div className="client-project-timeline-list">
+                  <div className="mt-5 grid gap-3">
                     {projectTimeline.slice(0, 5).map((entry) => (
                       <article
                         key={entry.id}
-                        className="client-project-timeline-card"
+                        className="rounded-2xl border border-white/10 bg-white/[0.045] p-4"
                       >
-                        <strong>{entry.title || "Project Update"}</strong>
-                        <span>
+                        <strong className="block text-base font-black text-white">
+                          {entry.title || "Project Update"}
+                        </strong>
+
+                        <span className="mt-2 block text-sm font-bold leading-7 text-white/55">
                           {formatValue(entry.entryType)} ·{" "}
                           {formatDate(entry.createdAt)}
                         </span>
-                        <p>{entry.body}</p>
+
+                        <p className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-7 text-white/70">
+                          {entry.body}
+                        </p>
                       </article>
                     ))}
                   </div>
                 )}
 
-                <div className="portal-card-action">
+                <div className="mt-6">
                   <Link
                     className="button button-secondary"
                     href="/portal/project-timeline"
