@@ -1,7 +1,12 @@
 import { formatCampaignCurrency } from "@/lib/foundersCampaign";
 
-export default function ProgressMeter({ amountRaised, goal, supporterCount }) {
-  const progress = goal > 0 ? Math.min((amountRaised / goal) * 100, 100) : 0;
+export default function ProgressMeter({
+  amountRaisedCents,
+  goalCents,
+  supporterCount,
+}) {
+  const progress =
+    goalCents > 0 ? Math.min((amountRaisedCents / goalCents) * 100, 100) : 0;
 
   return (
     <section className="founders-progress" aria-labelledby="campaign-progress-title">
@@ -11,12 +16,12 @@ export default function ProgressMeter({ amountRaised, goal, supporterCount }) {
             Confirmed campaign progress
           </p>
           <p className="founders-progress-total">
-            {formatCampaignCurrency(amountRaised)} <span>raised</span>
+            {formatCampaignCurrency(amountRaisedCents)} <span>raised</span>
           </p>
         </div>
         <div className="founders-progress-goal">
           <span>Goal</span>
-          <strong>{formatCampaignCurrency(goal)} CAD</strong>
+          <strong>{formatCampaignCurrency(goalCents)} CAD</strong>
         </div>
       </div>
 
@@ -25,8 +30,8 @@ export default function ProgressMeter({ amountRaised, goal, supporterCount }) {
         role="progressbar"
         aria-label="Campaign progress"
         aria-valuemin="0"
-        aria-valuemax={goal}
-        aria-valuenow={amountRaised}
+        aria-valuemax={goalCents}
+        aria-valuenow={amountRaisedCents}
       >
         <span style={{ width: `${progress}%` }} />
       </div>
