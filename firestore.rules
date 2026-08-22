@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.active == true;
+    }
+
+    function createsOwnRecord() {
+      return signedIn()
+        && request.resource.data.clientUid == request.auth.uid;
+    }
+
+    function ownsRecord() {
+      return signedIn()
+        && resource.data.clientUid == request.auth.uid;
+    }
+
+    function createsOwnClientProfile(clientId) {
+      return signedIn()
+        && request.auth.uid == clientId
+        && request.resource.data.clientUid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "clientUid",
+          "clientName",
+          "clientEmail",
+          "phone",
+          "instagram",
+          "status",
+          "source",
+          "createdAt",
+          "updatedAt"
+        ]);
+    }
+
+    function createsOwnMessage() {
+      return signedIn()
+        && request.resource.data.clientUid == request.auth.uid
+        && request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.senderRole == "client";
+    }
+
+    function clientUpdatesOwnConversation() {
+      return signedIn()
+        && resource.data.clientUid == request.auth.uid
+        && request.resource.data.clientUid == resource.data.clientUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "lastMessagePreview",
+          "lastMessageAt",
+          "unreadForAdmin",
+          "unreadForClient",
+          "updatedAt"
+        ]);
+    }
+
+    match /adminUsers/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /clients/{clientId} {
+      allow create: if isAdmin() || createsOwnClientProfile(clientId);
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == clientId);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /membershipApplications/{applicationId} {
+      allow create: if createsOwnRecord();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /consultRequests/{consultRequestId} {
+      allow create: if createsOwnRecord();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /conversations/{conversationId} {
+      allow create: if isAdmin() || createsOwnRecord();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin() || clientUpdatesOwnConversation();
+      allow delete: if false;
+    }
+
+    match /messages/{messageId} {
+      allow create: if isAdmin() || createsOwnMessage();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /projects/{projectId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /appointments/{appointmentId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /membershipOffers/{offerId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /membershipOfferResponses/{responseId} {
+      allow create: if createsOwnRecord();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /membershipChangeRequests/{requestId} {
+      allow create: if createsOwnRecord();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /projectTimeline/{entryId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin() || (ownsRecord() && resource.data.clientVisible == true);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /creditLedger/{entryId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin() || ownsRecord();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+  }
+}
