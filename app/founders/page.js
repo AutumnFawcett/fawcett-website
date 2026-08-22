@@ -40,15 +40,15 @@ export default function FoundersPage() {
         </div>
         <aside className="founders-hero-stat" aria-label="Campaign goal">
           <span>Campaign goal</span>
-          <strong>{formatCampaignCurrency(campaign.goal)}</strong>
+          <strong>{formatCampaignCurrency(campaign.goalCents)}</strong>
           <small>Canadian dollars</small>
         </aside>
       </section>
 
       <div className="founders-shell">
         <ProgressMeter
-          amountRaised={campaign.amountRaised}
-          goal={campaign.goal}
+          amountRaisedCents={campaign.amountRaisedCents}
+          goalCents={campaign.goalCents}
           supporterCount={campaign.supporterCount}
         />
 
@@ -62,7 +62,9 @@ export default function FoundersPage() {
               <p key={paragraph}>{paragraph}</p>
             ))}
             <div className="founders-principle">
-              <strong>{formatCampaignCurrency(campaign.minimumFounderSupport)} minimum</strong>
+              <strong>
+                {formatCampaignCurrency(campaign.minimumFounderSupportCents)} minimum
+              </strong>
               <span>qualifies for permanent Founder status</span>
             </div>
           </div>
@@ -99,7 +101,11 @@ export default function FoundersPage() {
           </div>
           <div className="founders-tiers">
             {campaign.rewardTiers.map((tier) => (
-              <RewardTierCard key={tier.amount} tier={tier} featured={tier.amount === 100} />
+              <RewardTierCard
+                key={tier.amountCents}
+                tier={tier}
+                featured={tier.amountCents === 10000}
+              />
             ))}
             <article className="founders-tier founders-tier-custom">
               <p className="founders-kicker">Custom support</p>
