@@ -22,6 +22,60 @@ service cloud.firestore {
         && resource.data.clientUid == request.auth.uid;
     }
 
+    function createsValidMembershipChangeRequest() {
+      return signedIn()
+        && request.resource.data.keys().hasAll([
+          "clientUid",
+          "clientEmail",
+          "clientName",
+          "requestType",
+          "requestStatus",
+          "reason",
+          "clientAcknowledgement",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "clientUid",
+          "clientEmail",
+          "clientName",
+          "requestType",
+          "requestStatus",
+          "reason",
+          "clientAcknowledgement",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.clientUid == request.auth.uid
+        && request.resource.data.clientUid is string
+        && request.resource.data.clientEmail is string
+        && request.resource.data.clientName is string
+        && request.resource.data.reason is string
+        && request.resource.data.requestType in [
+          "pause_monthly_payments",
+          "cancel_monthly_payments",
+          "resume_monthly_payments",
+          "change_monthly_amount"
+        ]
+        && request.resource.data.requestStatus == "new"
+        && request.resource.data.clientAcknowledgement is map
+        && request.resource.data.clientAcknowledgement.keys().hasAll([
+          "understandsThisIsARequest",
+          "understandsStudioMustReview",
+          "understandsCreditBalanceDoesNotAutomaticallyDisappear"
+        ])
+        && request.resource.data.clientAcknowledgement.keys().hasOnly([
+          "understandsThisIsARequest",
+          "understandsStudioMustReview",
+          "understandsCreditBalanceDoesNotAutomaticallyDisappear"
+        ])
+        && request.resource.data.clientAcknowledgement.understandsThisIsARequest is bool
+        && request.resource.data.clientAcknowledgement.understandsStudioMustReview is bool
+        && request.resource.data.clientAcknowledgement.understandsCreditBalanceDoesNotAutomaticallyDisappear is bool
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
     function createsOwnClientProfile(clientId) {
       return signedIn()
         && request.auth.uid == clientId
@@ -135,7 +189,7 @@ service cloud.firestore {
     }
 
     match /membershipChangeRequests/{requestId} {
-      allow create: if createsOwnRecord();
+      allow create: if createsValidMembershipChangeRequest();
       allow read: if isAdmin() || ownsRecord();
       allow update: if isAdmin();
       allow delete: if false;
