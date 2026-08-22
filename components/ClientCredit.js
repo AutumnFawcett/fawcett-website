@@ -234,22 +234,12 @@ async function submitMembershipChangeRequest(event) {
       requestType,
       requestStatus: "new",
 
-      currentCreditBalanceCents: creditSummary.balanceCents,
-      totalCreditAddedCents: creditSummary.creditAddedCents,
-      totalCreditUsedCents: creditSummary.creditUsedCents,
-
       reason: requestReason.trim(),
 
       clientAcknowledgement: {
         understandsThisIsARequest: true,
         understandsStudioMustReview: true,
         understandsCreditBalanceDoesNotAutomaticallyDisappear: true,
-      },
-
-      adminReview: {
-        internalNotes: "",
-        reviewedBy: "",
-        reviewedAt: null,
       },
 
       createdAt: serverTimestamp(),
