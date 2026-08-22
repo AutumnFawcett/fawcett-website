@@ -7,7 +7,7 @@ export default function RewardTierCard({ tier, featured = false }) {
         <p>{tier.title}</p>
         {featured && <span>Signature tier</span>}
       </div>
-      <h3>{formatCampaignCurrency(tier.amount)}</h3>
+      <h3>{formatCampaignCurrency(tier.amountCents)}</h3>
       <p className="founders-tier-currency">CAD confirmed support</p>
       <ul>
         {tier.rewards.map((reward) => (
