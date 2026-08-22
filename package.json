@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test:firestore": "firebase emulators:exec --only firestore \"node --test tests/firestore/membershipChangeRequests.rules.test.js\"",
     "start": "next start",
     "lint": "eslint"
   },
@@ -16,9 +17,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@firebase/rules-unit-testing": "^5.0.0",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
+    "firebase-tools": "^14.0.0",
     "tailwindcss": "^4"
   }
 }
