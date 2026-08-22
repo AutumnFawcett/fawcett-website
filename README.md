@@ -2,19 +2,37 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies with npm:
+
+```bash
+npm install
+```
+
+Copy the example environment file and fill in the Firebase configuration values:
+
+```bash
+cp .env.example .env.local
+```
+
+Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+Run lint checks:
+
+```bash
+npm run lint
+```
+
+Create a production build:
+
+```bash
+npm run build
+```
 
 You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
 
