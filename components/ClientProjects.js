@@ -589,10 +589,6 @@ export default function ClientProjects() {
                 Once the studio creates a project from your consult or
                 membership application, it will appear here.
               </p>
-
-              <Link className="button button-primary mt-5 w-full" href="/consult">
-                Start New Consult
-              </Link>
             </div>
           ) : (
             <div className="mt-6 grid gap-3">
