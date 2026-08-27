@@ -18,9 +18,9 @@ const policySections = [
   {
     title: "Deposits, Booking Fees & Drawing Fees",
     text: [
-      "Some appointments or projects may require a deposit, in-store credit, booking fee, drawing fee, &/or design fee before time is reserved or design work begins.",
-      "Any required in-store credit,  deposit, booking fee, drawing fee, design fee, supply fee, GST, or other mandatory cost will be disclosed before the client confirms the booking or enrollment.",
-      "Deposits, in-store credits and fees may be non-refundable depending on the project, appointment type, artist preparation time, design work completed, and studio terms provided at the time of booking.",
+      "Some appointments or projects may require a deposit, pre-payment, payment in full, in-store credit, booking fee, drawing fee, and/or design fee before time is reserved or design work begins.",
+      "Any required deposit, pre-payment, payment in full, in-store credit, booking fee, drawing fee, design fee, supply fee, GST, payment-processing fee, or other mandatory cost will be disclosed before the client confirms the booking or enrollment.",
+       "The refundability of deposits, pre-payments, payments in full, in-store credits, and fees depends on the project, appointment type, artist preparation time, design work completed, applicable law, and the studio terms disclosed at the time of booking or purchase.",
     ],
   },
   {

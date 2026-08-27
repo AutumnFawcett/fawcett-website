@@ -185,7 +185,7 @@ export default function HomePage() {
 
           <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/5">
             <img
-              src="/hero-studio.png"
+              src="/hero-studio.jpg"
               alt="Fawcett Tattoo studio"
               className="h-[420px] w-full object-cover md:h-[560px]"
             />
