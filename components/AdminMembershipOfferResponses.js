@@ -130,8 +130,8 @@ function getResponseStatusClass(status) {
 
 function getDefaultClientMessage(response, application) {
   const responseType = response?.responseType;
-  const clientName = response?.clientName || application?.clientName || "there";
-  const offer = response?.offerSnapshot || application?.membershipOffer || {};
+  const clientName = application?.clientName || "there";
+  const offer = application?.membershipOffer || {};
 
   if (responseType === "request_accept_offer") {
     return `Hi ${clientName},
@@ -237,13 +237,13 @@ export default function AdminMembershipOfferResponses(){
         if (!normalizedSearch) return true;
 
         const searchableText = [
-          response.clientName,
-          response.clientEmail,
+          response.application?.clientName,
+          response.application?.clientEmail,
           response.responseType,
           response.responseLabel,
           response.responseStatus,
           response.clientNote,
-          response.offerSnapshot?.tierLabel,
+          response.application?.membershipOffer?.tierLabel,
           response.application?.project?.tattooIdea,
           response.adminReview?.internalNotes,
           response.adminReview?.clientMessage,
@@ -802,7 +802,7 @@ export default function AdminMembershipOfferResponses(){
                     </small>
 
                     <small>
-                      {response.offerSnapshot?.tierLabel || "Membership Offer"}
+                      {response.application?.membershipOffer?.tierLabel || "Membership Offer"}
                     </small>
                   </div>
 
@@ -827,7 +827,7 @@ export default function AdminMembershipOfferResponses(){
               <div className="membership-admin-title-row">
                 <div>
                   <p className="eyebrow">Offer Response</p>
-                  <h2>{selectedResponse.clientName || "Client"}</h2>
+                  <h2>{selectedResponse.application?.clientName || "Client"}</h2>
                   <p>{getResponseLabel(selectedResponse.responseType)}</p>
                 </div>
 
@@ -855,12 +855,12 @@ export default function AdminMembershipOfferResponses(){
 
                   <p>
                     <strong>Name:</strong>{" "}
-                    {selectedResponse.clientName || "Not provided"}
+                    {selectedResponse.application?.clientName || "Not provided"}
                   </p>
 
                   <p>
                     <strong>Email:</strong>{" "}
-                    {selectedResponse.clientEmail || "Not provided"}
+                    {selectedResponse.application?.clientEmail || "Not provided"}
                   </p>
 
                   <p>
@@ -874,27 +874,27 @@ export default function AdminMembershipOfferResponses(){
 
                   <p>
                     <strong>Tier:</strong>{" "}
-                    {selectedResponse.offerSnapshot?.tierLabel || "Not provided"}
+                    {selectedResponse.application?.membershipOffer?.tierLabel || "Not provided"}
                   </p>
 
                   <p>
                     <strong>Initial:</strong>{" "}
                     {formatMoneyFromCents(
-                      selectedResponse.offerSnapshot?.initialPaymentCents
+                      selectedResponse.application?.membershipOffer?.initialPaymentCents
                     )}
                   </p>
 
                   <p>
                     <strong>Monthly:</strong>{" "}
                     {formatMoneyFromCents(
-                      selectedResponse.offerSnapshot?.monthlyPaymentCents
+                      selectedResponse.application?.membershipOffer?.monthlyPaymentCents
                     )}
                   </p>
 
                   <p>
                     <strong>Minimum Project:</strong>{" "}
                     {formatMoneyFromCents(
-                      selectedResponse.offerSnapshot?.minimumProjectValueCents
+                      selectedResponse.application?.membershipOffer?.minimumProjectValueCents
                     )}
                   </p>
                 </article>

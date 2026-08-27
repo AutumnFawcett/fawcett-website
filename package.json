@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "test:firestore": "firebase emulators:exec --only firestore \"node --test tests/firestore/membershipChangeRequests.rules.test.js\"",
+    "test:firestore": "firebase emulators:exec --only firestore \"node --test tests/firestore/*.rules.test.js\"",
     "start": "next start",
     "lint": "eslint"
   },
