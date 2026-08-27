@@ -76,6 +76,46 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp;
     }
 
+    function createsValidMembershipOfferResponse() {
+      let applicationPath = /databases/$(database)/documents/membershipApplications/$(request.resource.data.applicationId);
+
+      return signedIn()
+        && request.resource.data.keys().hasAll([
+          "clientUid",
+          "applicationId",
+          "responseType",
+          "responseStatus",
+          "clientNote",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "clientUid",
+          "applicationId",
+          "responseType",
+          "responseStatus",
+          "clientNote",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.clientUid is string
+        && request.resource.data.clientUid == request.auth.uid
+        && request.resource.data.applicationId is string
+        && request.resource.data.responseType is string
+        && request.resource.data.responseType in [
+          "request_accept_offer",
+          "ask_question",
+          "decline_offer"
+        ]
+        && request.resource.data.responseStatus is string
+        && request.resource.data.responseStatus == "new"
+        && request.resource.data.clientNote is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && exists(applicationPath)
+        && get(applicationPath).data.clientUid == request.auth.uid;
+    }
+
     function createsOwnClientProfile(clientId) {
       return signedIn()
         && request.auth.uid == clientId
@@ -182,7 +222,7 @@ service cloud.firestore {
     }
 
     match /membershipOfferResponses/{responseId} {
-      allow create: if createsOwnRecord();
+      allow create: if createsValidMembershipOfferResponse();
       allow read: if isAdmin() || ownsRecord();
       allow update: if isAdmin();
       allow delete: if false;
