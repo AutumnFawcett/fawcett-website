@@ -17,6 +17,81 @@ service cloud.firestore {
         && request.resource.data.clientUid == request.auth.uid;
     }
 
+    function createsValidMembershipApplication() {
+      let data = request.resource.data;
+
+      return signedIn()
+        && data.keys().hasAll([
+          "programName", "applicationType", "clientUid", "clientEmail",
+          "clientName", "phone", "instagram", "preferredContactMethod",
+          "status", "preferredArtist", "project", "coverUp", "budget",
+          "timeline", "readiness", "acknowledgements", "createdAt", "updatedAt"
+        ])
+        && data.keys().hasOnly([
+          "programName", "applicationType", "clientUid", "clientEmail",
+          "clientName", "phone", "instagram", "preferredContactMethod",
+          "status", "preferredArtist", "project", "coverUp", "budget",
+          "timeline", "readiness", "acknowledgements", "createdAt", "updatedAt"
+        ])
+        && data.programName == "Tattoo Project Membership Program"
+        && data.applicationType == "founding_member_interest"
+        && data.clientUid is string && data.clientUid == request.auth.uid
+        && data.clientEmail is string && data.clientEmail.matches('.*\\S.*') && data.clientEmail.size() <= 320
+        && data.clientName is string && data.clientName.matches('.*\\S.*') && data.clientName.size() <= 120
+        && data.phone is string && data.phone.matches('.*\\S.*') && data.phone.size() <= 50
+        && data.instagram is string && data.instagram.size() <= 100
+        && data.preferredContactMethod in ["email", "text", "phone", "instagram"]
+        && data.status == "new"
+        && data.preferredArtist in ["ben", "autumn", "no_preference", "not_sure"]
+        && data.project is map
+        && data.project.keys().hasAll(["projectType", "tattooIdea", "colourPreference", "placement", "bodySide", "sizeCategory", "detailLevel"])
+        && data.project.keys().hasOnly(["projectType", "tattooIdea", "colourPreference", "placement", "bodySide", "sizeCategory", "detailLevel"])
+        && data.project.projectType in ["full_sleeve", "half_sleeve", "leg_sleeve", "large_leg_piece", "back_piece", "cover_up", "multi_session", "other", "not_sure"]
+        && data.project.tattooIdea is string && data.project.tattooIdea.matches('.*\\S.*') && data.project.tattooIdea.size() <= 4000
+        && data.project.colourPreference in ["black_and_grey", "colour", "black_grey_with_colour", "not_sure"]
+        && data.project.placement is string && data.project.placement.matches('.*\\S.*') && data.project.placement.size() <= 200
+        && data.project.bodySide in ["left", "right", "both", "centre", "not_sure"]
+        && data.project.sizeCategory in ["palm_sized", "hand_sized", "forearm_sized", "half_sleeve", "full_sleeve", "large_leg_piece", "full_leg", "full_back", "multi_area", "not_sure"]
+        && data.project.detailLevel in ["simple", "moderate", "high_detail", "realism", "not_sure"]
+        && data.coverUp is map
+        && data.coverUp.keys().hasAll(["isCoverUp", "coverUpDescription"])
+        && data.coverUp.keys().hasOnly(["isCoverUp", "coverUpDescription"])
+        && data.coverUp.isCoverUp in ["yes", "no", "maybe", "partially"]
+        && data.coverUp.coverUpDescription is string && data.coverUp.coverUpDescription.size() <= 2000
+        && data.budget is map
+        && data.budget.keys().hasAll(["tierInterest", "monthlyComfort", "paymentStyle"])
+        && data.budget.keys().hasOnly(["tierInterest", "monthlyComfort", "paymentStyle"])
+        && data.budget.tierInterest in ["starter", "builder", "commitment", "custom", "not_sure"]
+        && data.budget.monthlyComfort in ["under_150", "150", "300", "500", "500_plus", "lump_sum", "not_sure"]
+        && data.budget.paymentStyle in ["monthly", "pay_per_session", "larger_deposit", "build_before_booking", "build_between_sessions", "custom", "not_sure"]
+        && data.timeline is map
+        && data.timeline.keys().hasAll(["planningTimeline", "completionWindow", "availability"])
+        && data.timeline.keys().hasOnly(["planningTimeline", "completionWindow", "availability"])
+        && data.timeline.planningTimeline in ["immediately", "1_3_months", "3_6_months", "6_12_months", "planning_ahead"]
+        && data.timeline.completionWindow in ["yes", "maybe", "no", "artist_estimate"]
+        && data.timeline.availability is string && data.timeline.availability.matches('.*\\S.*') && data.timeline.availability.size() <= 2000
+        && data.readiness is map
+        && data.readiness.keys().hasAll(["readyForConsult", "healthConsiderations", "healthDetails"])
+        && data.readiness.keys().hasOnly(["readyForConsult", "healthConsiderations", "healthDetails"])
+        && data.readiness.readyForConsult in ["yes", "not_yet", "questions_first"]
+        && data.readiness.healthConsiderations in ["yes", "no", "not_sure", "discuss_privately"]
+        && data.readiness.healthDetails is string && data.readiness.healthDetails.size() <= 2000
+        && data.acknowledgements is map
+        && data.acknowledgements.keys().hasAll(["applicationOnly", "noPaymentCollected", "noGuarantee", "notInvestmentLoanDiscount", "mandatoryCostsBeforeEnrollment", "termsBeforeEnrollment", "studioPolicy", "informationAccurate", "contactPermission"])
+        && data.acknowledgements.keys().hasOnly(["applicationOnly", "noPaymentCollected", "noGuarantee", "notInvestmentLoanDiscount", "mandatoryCostsBeforeEnrollment", "termsBeforeEnrollment", "studioPolicy", "informationAccurate", "contactPermission"])
+        && data.acknowledgements.applicationOnly == true
+        && data.acknowledgements.noPaymentCollected == true
+        && data.acknowledgements.noGuarantee == true
+        && data.acknowledgements.notInvestmentLoanDiscount == true
+        && data.acknowledgements.mandatoryCostsBeforeEnrollment == true
+        && data.acknowledgements.termsBeforeEnrollment == true
+        && data.acknowledgements.studioPolicy == true
+        && data.acknowledgements.informationAccurate == true
+        && data.acknowledgements.contactPermission == true
+        && data.createdAt is timestamp && data.createdAt == request.time
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
     function ownsRecord() {
       return signedIn()
         && resource.data.clientUid == request.auth.uid;
@@ -166,7 +241,7 @@ service cloud.firestore {
     }
 
     match /membershipApplications/{applicationId} {
-      allow create: if createsOwnRecord();
+      allow create: if createsValidMembershipApplication();
       allow read: if isAdmin() || ownsRecord();
       allow update: if isAdmin();
       allow delete: if false;
