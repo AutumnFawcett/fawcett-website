@@ -280,32 +280,10 @@ export default function ClientMembershipOffers() {
     try {
       const responseRef = await addDoc(collection(db, "membershipOfferResponses"), {
         clientUid: user.uid,
-        clientEmail: user.email || application.clientEmail || "",
-        clientName: application.clientName || user.displayName || user.email || "Client",
-
         applicationId: application.id,
         responseType,
-        responseLabel: getResponseLabel(responseType),
         responseStatus: "new",
-
         clientNote: note.trim(),
-
-        offerSnapshot: {
-          tier: offer.tier || "",
-          tierLabel: offer.tierLabel || "",
-          initialPaymentCents: offer.initialPaymentCents || 0,
-          monthlyPaymentCents: offer.monthlyPaymentCents || 0,
-          minimumProjectValueCents: offer.minimumProjectValueCents || 0,
-          paymentStartDate: offer.paymentStartDate || "",
-          termsSummary: offer.termsSummary || "",
-        },
-
-        adminReview: {
-          internalNotes: "",
-          reviewedBy: "",
-          reviewedAt: null,
-        },
-
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
