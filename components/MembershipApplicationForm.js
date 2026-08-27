@@ -173,9 +173,6 @@ export default function MembershipApplicationForm() {
           preferredContactMethod: form.preferredContactMethod,
 
           status: "new",
-          assignedInbox: "general",
-          assignedArtistId: null,
-
           preferredArtist: form.preferredArtist,
 
           project: {
@@ -292,6 +289,7 @@ export default function MembershipApplicationForm() {
                 type="text"
                 value={authName}
                 onChange={(event) => setAuthName(event.target.value)}
+                maxLength={120}
                 required
               />
             </label>
@@ -370,6 +368,7 @@ export default function MembershipApplicationForm() {
             type="text"
             value={form.fullName}
             onChange={(event) => updateField("fullName", event.target.value)}
+            maxLength={120}
             required
           />
         </label>
@@ -380,6 +379,7 @@ export default function MembershipApplicationForm() {
             type="tel"
             value={form.phone}
             onChange={(event) => updateField("phone", event.target.value)}
+            maxLength={50}
             required
           />
         </label>
@@ -390,6 +390,7 @@ export default function MembershipApplicationForm() {
             type="text"
             value={form.instagram}
             onChange={(event) => updateField("instagram", event.target.value)}
+            maxLength={100}
             placeholder="@username"
           />
         </label>
@@ -458,6 +459,7 @@ export default function MembershipApplicationForm() {
           <textarea
             value={form.tattooIdea}
             onChange={(event) => updateField("tattooIdea", event.target.value)}
+            maxLength={4000}
             rows={6}
             required
           />
@@ -491,6 +493,7 @@ export default function MembershipApplicationForm() {
             type="text"
             value={form.placement}
             onChange={(event) => updateField("placement", event.target.value)}
+            maxLength={200}
             placeholder="Example: left forearm, full arm, thigh, back"
             required
           />
@@ -574,6 +577,7 @@ export default function MembershipApplicationForm() {
             onChange={(event) =>
               updateField("coverUpDescription", event.target.value)
             }
+            maxLength={2000}
             rows={4}
           />
         </label>
@@ -693,6 +697,7 @@ export default function MembershipApplicationForm() {
           <textarea
             value={form.availability}
             onChange={(event) => updateField("availability", event.target.value)}
+            maxLength={2000}
             rows={3}
             placeholder="Example: weekdays, Saturdays, evenings, childcare schedule, travel limits"
             required
@@ -745,6 +750,7 @@ export default function MembershipApplicationForm() {
             onChange={(event) =>
               updateField("healthDetails", event.target.value)
             }
+            maxLength={2000}
             rows={4}
           />
         </label>
