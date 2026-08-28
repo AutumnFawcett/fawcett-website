@@ -42,6 +42,10 @@ Subscribe only to the events this foundation understands:
 
 Other event types are signature-validated and recorded as ignored. POS, appointment, and other Square payments are also ignored unless they carry a server-issued `reference_id` in the form `fawcett:<purpose>:<orderId>:<expectedCents>[:<enrollmentId>[:<clientUid>]]`, where purpose is `founders`, `membership`, `appointment`, or `other`. The webhook requires the integer CAD amount to equal `expectedCents`. A browser must never construct this link or supply a price/payment state. Before checkout is enabled, replace this compact linking convention with a pre-created, server-owned order/link record and validate amount, currency, location, and purpose against it.
 
+Only a Square payment whose status is exactly `COMPLETED` creates the immutable charge effect. `APPROVED`, `PENDING`, `CANCELED`, and `FAILED` deliveries are retained as ignored webhook events and never count as collected funds. Similarly, a refund effect is created only for `COMPLETED`; pending or unsuccessful refund states do not create financial records and cannot block a later completed event.
+
+Square's documented dispute lifecycle includes `EVIDENCE_REQUIRED`, `PROCESSING`, `WON`, `LOST`, and `ACCEPTED`. A dispute can withhold funds before its terminal result, so the first observed debit-bearing state (`EVIDENCE_REQUIRED`, `PROCESSING`, `ACCEPTED`, or `LOST`) creates one immutable `chargeback` effect keyed by the Square dispute ID. Later state webhooks cannot create a second effect. `WON` does not automatically create a credit or reversal in this phase: recovery timing and settlement evidence require reconciliation before a compensating transaction can be recorded.
+
 ## Local Sandbox testing
 
 1. Create a Sandbox webhook subscription in the Square Developer Dashboard.
@@ -71,6 +75,6 @@ Each record contains `provider`, `environment`, `eventId`, `eventType`, `payload
 
 ### `paymentTransactions/{transactionId}`
 
-Each record contains `provider`, `environment`, `currency`, `amountCents`, `type`, `status`, `purpose`, `providerTransactionId`, `webhookEventId`, `webhookEventType`, `reconciliationStatus`, `createdAt`, and `updatedAt`. Depending on the provider object and trusted link it can also contain `providerPaymentId`, `providerOrderId`, `orderId`, `enrollmentId`, `clientUid`, and `parentTransactionId`.
+Each record contains `provider`, `environment`, `providerLocationId`, `currency`, `amountCents`, `type`, `status`, `purpose`, `providerTransactionId`, `webhookEventId`, `webhookEventType`, `reconciliationStatus`, `createdAt`, and `updatedAt`. Depending on the provider object and trusted link it can also contain `providerPaymentId`, `providerOrderId`, `orderId`, `enrollmentId`, `clientUid`, `providerState`, and `parentTransactionId`.
 
 Browser clients cannot read webhook records or write either collection. Active admins can read payment transactions, but cannot write them from a browser. Clients cannot read transactions in this phase.
