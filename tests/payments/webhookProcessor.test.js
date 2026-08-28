@@ -22,7 +22,7 @@ class MemoryFirestore {
     return run;
   }
 }
-function event(id = "evt") { return { event_id: id, type: "payment.updated", location_id: "loc", data: { object: { payment: { id: "pay", location_id: "loc", reference_id: "fawcett:founders:order:1000", amount_money: { amount: 1000, currency: "CAD" }, status: "COMPLETED" } } } }; }
+function event(id = "evt") { return { event_id: id, type: "payment.updated", location_id: "loc", data: { object: { payment: { id: "pay", location_id: "loc", order_id: "square-order", reference_id: "fawcett:founders:order:1000", amount_money: { amount: 1000, currency: "CAD" }, status: "COMPLETED" } } } }; }
 const now = () => "trusted-time";
 const args = (firestore, value, environment = "sandbox") => ({ firestore, environment, locationId: "loc", event: value, rawBody: JSON.stringify(value), now });
 const transactions = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("paymentTransactions/"));
@@ -113,4 +113,12 @@ test("transaction ID collision with inconsistent amount is rejected", async () =
   collision.data.object.payment.reference_id = "fawcett:founders:order:2000";
   assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "invalid", reason: "transaction_identity_collision" });
   assert.equal(firestore.docs.get("paymentTransactions/sandbox_charge_pay").amountCents, 1000);
+});
+
+test("transaction ID collision differing only in provider order ID is rejected", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  const collision = event("collision");
+  collision.data.object.payment.order_id = "different-square-order";
+  assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "invalid", reason: "transaction_identity_collision" });
+  assert.equal(firestore.docs.get("paymentTransactions/sandbox_charge_pay").providerOrderId, "square-order");
 });

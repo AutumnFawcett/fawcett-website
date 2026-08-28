@@ -25,7 +25,7 @@ test("errors are safe and contain no secrets", async () => {
 });
 
 test("validly signed payment must match the configured Square location", async () => {
-  const event = (locationId) => ({ event_id: `event-${locationId}`, type: "payment.updated", data: { object: { payment: { id: "payment", location_id: locationId, reference_id: "fawcett:founders:order:1000", amount_money: { amount: 1000, currency: "CAD" }, status: "COMPLETED" } } } });
+  const event = (locationId) => ({ event_id: `event-${locationId}`, type: "payment.updated", data: { object: { payment: { id: "payment", location_id: locationId, order_id: "square-order", reference_id: "fawcett:founders:order:1000", amount_money: { amount: 1000, currency: "CAD" }, status: "COMPLETED" } } } });
   const normalize = async ({ event: value, environment, locationId }) => normalizeSquareEvent(value, environment, locationId);
   const wrongBody = JSON.stringify(event("other-location"));
   const wrong = await handleSquareWebhook({ request: request(wrongBody), config, process: normalize });
