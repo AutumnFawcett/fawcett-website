@@ -289,6 +289,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Financial records are written only by trusted server code through Admin SDK.
+    match /paymentWebhookEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /paymentTransactions/{transactionId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     match /membershipOffers/{offerId} {
       allow create: if isAdmin();
       allow read: if isAdmin() || ownsRecord();
