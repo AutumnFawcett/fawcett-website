@@ -3,16 +3,30 @@ import assert from "node:assert/strict";
 import { processSquareWebhook } from "../../lib/payments/webhookProcessor.js";
 
 class MemoryFirestore {
-  constructor() { this.docs = new Map(); this.queue = Promise.resolve(); this.failOnce = false; }
-  collection(name) { return { doc: (id) => ({ path: `${name}/${id}` }) }; }
+  constructor() {
+    this.docs = new Map(); this.queue = Promise.resolve(); this.failOnce = false;
+    this.docs.set("paymentOrders/order", { orderId: "order", provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
+    this.docs.set("paymentOrders/order-production", { orderId: "order-production", provider: "square", environment: "production", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
+  }
+  collection(name) {
+    const query = { collection: name, filters: [], where(field, op, value) { return Object.assign(Object.create(this), { filters: [...this.filters, [field, op, value]] }); }, limit(count) { return Object.assign(Object.create(this), { limitCount: count }); } };
+    return Object.assign(query, { doc: (id) => ({ path: `${name}/${id}` }) });
+  }
   runTransaction(callback) {
     const run = this.queue.then(async () => {
       if (this.failOnce) { this.failOnce = false; throw new Error("temporary"); }
       const writes = [];
       const tx = {
-        get: async (ref) => ({ exists: this.docs.has(ref.path), data: () => this.docs.get(ref.path) }),
+        get: async (ref) => {
+          if (ref.collection) {
+            const docs = [...this.docs.entries()].filter(([path, value]) => path.startsWith(`${ref.collection}/`) && ref.filters.every(([field,, expected]) => value[field] === expected)).slice(0, ref.limitCount);
+            return { size: docs.length, docs: docs.map(([, value]) => ({ data: () => value })) };
+          }
+          return { exists: this.docs.has(ref.path), data: () => this.docs.get(ref.path) };
+        },
         set: (ref, value) => writes.push([ref.path, value, false]),
         create: (ref, value) => writes.push([ref.path, value, true]),
+        update: (ref, value) => writes.push([ref.path, { ...this.docs.get(ref.path), ...value }, false]),
       };
       const result = await callback(tx);
       for (const [path, value, create] of writes) { if (create && this.docs.has(path)) throw new Error("exists"); this.docs.set(path, value); }
@@ -22,7 +36,7 @@ class MemoryFirestore {
     return run;
   }
 }
-function event(id = "evt") { return { event_id: id, type: "payment.updated", location_id: "loc", data: { object: { payment: { id: "pay", location_id: "loc", order_id: "square-order", reference_id: "fawcett:founders:order:1000", amount_money: { amount: 1000, currency: "CAD" }, status: "COMPLETED" } } } }; }
+function event(id = "evt") { return { event_id: id, type: "payment.updated", location_id: "loc", data: { object: { payment: { id: "pay", location_id: "loc", order_id: "square-order", reference_id: "order", amount_money: { amount: 1000, currency: "CAD" }, status: "COMPLETED" } } } }; }
 const now = () => "trusted-time";
 const args = (firestore, value, environment = "sandbox") => ({ firestore, environment, locationId: "loc", event: value, rawBody: JSON.stringify(value), now });
 const transactions = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("paymentTransactions/"));
@@ -31,6 +45,14 @@ test("first delivery and exact duplicate create one logical effect", async () =>
   assert.equal((await processSquareWebhook({ firestore, environment: "sandbox", locationId: "loc", event: value, rawBody, now })).outcome, "processed");
   assert.equal((await processSquareWebhook({ firestore, environment: "sandbox", locationId: "loc", event: value, rawBody, now })).duplicate, true);
   assert.equal([...firestore.docs.keys()].filter((key) => key.startsWith("paymentTransactions/")).length, 1);
+  assert.equal(firestore.docs.get("paymentOrders/order").status, "paid");
+});
+
+test("storage failure leaves both paid status and transaction effect unapplied", async () => {
+  const firestore = new MemoryFirestore(); firestore.failOnce = true;
+  await assert.rejects(processSquareWebhook(args(firestore, event("atomic"))));
+  assert.equal(firestore.docs.get("paymentOrders/order").status, "pending");
+  assert.equal(transactions(firestore).length, 0);
 });
 test("concurrent duplicates create one logical effect", async () => {
   const firestore = new MemoryFirestore(); const value = event(); const args = { firestore, environment: "sandbox", locationId: "loc", event: value, rawBody: JSON.stringify(value), now };
@@ -110,8 +132,8 @@ test("transaction ID collision with inconsistent amount is rejected", async () =
   const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
   const collision = event("collision");
   collision.data.object.payment.amount_money.amount = 2000;
-  collision.data.object.payment.reference_id = "fawcett:founders:order:2000";
-  assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "invalid", reason: "transaction_identity_collision" });
+  collision.data.object.payment.reference_id = "order";
+  assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "invalid", reason: "amount_mismatch" });
   assert.equal(firestore.docs.get("paymentTransactions/sandbox_charge_pay").amountCents, 1000);
 });
 
@@ -119,6 +141,6 @@ test("transaction ID collision differing only in provider order ID is rejected",
   const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
   const collision = event("collision");
   collision.data.object.payment.order_id = "different-square-order";
-  assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "invalid", reason: "transaction_identity_collision" });
+  assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "ignored", reason: "unrecognized_provider_order_id" });
   assert.equal(firestore.docs.get("paymentTransactions/sandbox_charge_pay").providerOrderId, "square-order");
 });

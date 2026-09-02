@@ -26,10 +26,14 @@ test("errors are safe and contain no secrets", async () => {
 
 test("validly signed payment must match the configured Square location", async () => {
   const event = (locationId) => ({ event_id: `event-${locationId}`, type: "payment.updated", data: { object: { payment: { id: "payment", location_id: locationId, order_id: "square-order", reference_id: "fawcett:founders:order:1000", amount_money: { amount: 1000, currency: "CAD" }, status: "COMPLETED" } } } });
-  const normalize = async ({ event: value, environment, locationId }) => normalizeSquareEvent(value, environment, locationId);
+  const normalize = async ({ event: value, environment, locationId }) => normalizeSquareEvent(value, environment, locationId, null, {
+    orderId: "order", provider: "square", environment: "sandbox", purpose: "founder",
+    amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending",
+  });
   const wrongBody = JSON.stringify(event("other-location"));
   const wrong = await handleSquareWebhook({ request: request(wrongBody), config, process: normalize });
   assert.deepEqual(wrong, { status: 409, body: { outcome: "invalid", reason: "location_mismatch" } });
-  const correctBody = JSON.stringify(event("configured-location"));
+  const correct = event("configured-location"); correct.data.object.payment.reference_id = "order";
+  const correctBody = JSON.stringify(correct);
   assert.equal((await handleSquareWebhook({ request: request(correctBody), config, process: normalize })).body.outcome, "processed");
 });

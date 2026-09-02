@@ -36,3 +36,14 @@ test("webhook events are unreadable and transactions are admin-read-only", async
   await assertFails(getDoc(doc(env.authenticatedContext("client").firestore(), "paymentTransactions", "transaction")));
   await assertFails(getDoc(doc(env.authenticatedContext("other").firestore(), "paymentTransactions", "transaction")));
 });
+
+test("paymentOrders are inaccessible to unauthenticated and non-admin clients", async () => {
+  await seed("paymentOrders", "order", { orderId: "order", status: "pending" });
+  for (const db of [env.unauthenticatedContext().firestore(), env.authenticatedContext("client").firestore()]) {
+    const ref = doc(db, "paymentOrders", "order");
+    await assertFails(getDoc(ref));
+    await assertFails(setDoc(doc(db, "paymentOrders", "new-order"), { orderId: "new-order" }));
+    await assertFails(updateDoc(ref, { status: "paid" }));
+    await assertFails(deleteDoc(ref));
+  }
+});
