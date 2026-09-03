@@ -14,6 +14,7 @@ import { auth, db } from "@/lib/firebaseClient";
 
 export default function TattooPortalLogin() {
   const router = useRouter();
+  const safeDestination = () => new URLSearchParams(window.location.search).get("returnTo") === "/founders" ? "/founders" : "/portal/dashboard";
 
   const [mode, setMode] = useState("client_login");
 
@@ -50,7 +51,7 @@ export default function TattooPortalLogin() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/portal/dashboard");
+      router.push(safeDestination());
     } catch (error) {
       console.error(error);
       setErrorMessage("Tattoo portal login failed. Check your email and password.");
@@ -120,7 +121,7 @@ export default function TattooPortalLogin() {
         updatedAt: serverTimestamp(),
       });
 
-      router.push("/portal/dashboard");
+      router.push(safeDestination());
     } catch (error) {
       console.error(error);
 

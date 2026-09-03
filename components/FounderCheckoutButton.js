@@ -1,0 +1,43 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { auth } from "@/lib/firebaseClient";
+
+function requestId() {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+
+export default function FounderCheckoutButton({ offerId, enabled }) {
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+  const retryId = useRef(null);
+
+  if (!enabled) return <div className="founders-tier-status" aria-label="This reward tier is not available yet">Available at launch</div>;
+
+  async function checkout() {
+    if (working) return;
+    setWorking(true);
+    setError("");
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        window.location.assign("/tattoo-portal?returnTo=%2Ffounders");
+        return;
+      }
+      const token = await user.getIdToken();
+      const response = await fetch("/api/payments/checkout/founder", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ offerId, requestId: retryId.current ||= requestId() }),
+      });
+      const result = await response.json();
+      if (!response.ok || typeof result.orderId !== "string" || typeof result.checkoutUrl !== "string" || !/^https:\/\/(square\.link|checkout\.square\.site)\//.test(result.checkoutUrl)) throw new Error("checkout_failed");
+      window.location.assign(result.checkoutUrl);
+    } catch {
+      setError("Checkout could not be started. Please try again.");
+      setWorking(false);
+    }
+  }
+
+  return <div className="founders-tier-checkout"><button type="button" className="founders-support-button" disabled={working} onClick={checkout}>{working ? "Starting checkout…" : "Support this tier"}</button><p role="alert">{error}</p></div>;
+}

@@ -233,6 +233,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /paymentCheckoutRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /paymentCheckoutRateLimits/{rateLimitId} {
+      allow read, write: if false;
+    }
+
     match /clients/{clientId} {
       allow create: if isAdmin() || createsOwnClientProfile(clientId);
       allow read: if isAdmin() || (signedIn() && request.auth.uid == clientId);

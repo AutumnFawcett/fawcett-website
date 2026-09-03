@@ -101,6 +101,10 @@ img {
 .founders-tier li { position: relative; padding-left: 16px; color: rgba(255,255,255,.66); font-size: .82rem; line-height: 1.5; }
 .founders-tier li::before { position: absolute; left: 0; color: #6969ff; content: "+"; }
 .founders-tier-status { margin-top: auto; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.1); color: rgba(255,255,255,.37); font-size: .64rem; letter-spacing: .16em; text-transform: uppercase; }
+.founders-tier-checkout { margin-top: auto; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.1); }
+.founders-support-button { width: 100%; padding: 13px 18px; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; background: #0000cc; color: white; font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.founders-support-button:disabled { cursor: wait; opacity: .6; }
+.founders-tier-checkout p { min-height: 1.2em; margin: 8px 0 0; color: #ff8dcf; font-size: .72rem; }
 .founders-tier-custom { grid-column: 4 / span 2; min-height: 230px; justify-content: center; border-style: dashed; }
 .founders-tier-custom h3 { margin: 15px 0 10px; font-size: 2rem; }
 .founders-tier-custom > p:last-child { color: rgba(255,255,255,.5); font-size: .85rem; line-height: 1.6; }
