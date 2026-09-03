@@ -290,6 +290,10 @@ service cloud.firestore {
     }
 
     // Financial records are written only by trusted server code through Admin SDK.
+    match /paymentOrders/{orderId} {
+      allow read, write: if false;
+    }
+
     match /paymentWebhookEvents/{eventId} {
       allow read, write: if false;
     }
