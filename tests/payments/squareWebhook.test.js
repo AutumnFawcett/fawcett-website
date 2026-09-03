@@ -44,3 +44,14 @@ test("refunds and disputes inherit both trusted identities", () => {
   const dispute = normalizeSquareEvent({ event_id: "d", type: "dispute.updated", data: { object: { dispute: { id: "dispute", disputed_payment: { payment_id: "pay" }, amount_money: { amount: 2500, currency: "CAD" }, state: "LOST" } } } }, "sandbox", "loc", parent);
   for (const result of [refund, dispute]) { assert.equal(result.transaction.orderId, "internal-order"); assert.equal(result.transaction.providerOrderId, "square-order"); }
 });
+test("refund provider order must match the trusted parent", () => {
+  const parent = { provider: "square", environment: "sandbox", providerLocationId: "loc", currency: "CAD", type: "charge", status: "completed", providerPaymentId: "pay", purpose: "founder", orderId: "internal-order", providerOrderId: "square-order" };
+  const result = normalizeSquareEvent({ event_id: "r", type: "refund.updated", data: { object: { refund: { id: "refund", payment_id: "pay", order_id: "other", amount_money: { amount: 500, currency: "CAD" }, status: "COMPLETED" } } } }, "sandbox", "loc", parent);
+  assert.deepEqual(result, { outcome: "invalid", reason: "refund_provider_order_mismatch" });
+});
+test("all non-completed charge states and unsupported events remain ignored", () => {
+  for (const status of ["APPROVED", "PENDING", "CANCELED", "FAILED"]) {
+    assert.deepEqual(normalizeSquareEvent(payment({ status }), "sandbox", "loc", null, order), { outcome: "ignored", reason: "payment_not_completed" });
+  }
+  assert.deepEqual(normalizeSquareEvent({ type: "catalog.version.updated" }, "sandbox", "loc"), { outcome: "ignored", reason: "unsupported_event" });
+});

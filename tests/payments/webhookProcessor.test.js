@@ -48,6 +48,23 @@ test("first delivery and exact duplicate create one logical effect", async () =>
   assert.equal(firestore.docs.get("paymentOrders/order").status, "paid");
 });
 
+test("completed event before provider-order linkage is retried after linkage", async () => {
+  const firestore = new MemoryFirestore();
+  firestore.docs.delete("paymentOrders/order");
+  const value = event("linkage-race");
+  const first = await processSquareWebhook(args(firestore, value));
+  assert.deepEqual(first, { outcome: "ignored", reason: "unrecognized_provider_order_id" });
+  assert.equal(transactions(firestore).length, 0);
+  const eventRecord = [...firestore.docs.entries()].find(([path]) => path.startsWith("paymentWebhookEvents/"))[1];
+  assert.equal(eventRecord.processingState, "retryable_unlinked");
+
+  firestore.docs.set("paymentOrders/order", { orderId: "order", provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
+  assert.equal((await processSquareWebhook(args(firestore, value))).outcome, "processed");
+  assert.equal(transactions(firestore).length, 1);
+  assert.equal((await processSquareWebhook(args(firestore, value))).duplicate, true);
+  assert.equal(transactions(firestore).length, 1);
+});
+
 test("storage failure leaves both paid status and transaction effect unapplied", async () => {
   const firestore = new MemoryFirestore(); firestore.failOnce = true;
   await assert.rejects(processSquareWebhook(args(firestore, event("atomic"))));
@@ -139,8 +156,8 @@ test("transaction ID collision with inconsistent amount is rejected", async () =
 
 test("transaction ID collision differing only in provider order ID is rejected", async () => {
   const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  firestore.docs.get("paymentTransactions/sandbox_charge_pay").providerOrderId = "tampered-provider-order";
   const collision = event("collision");
-  collision.data.object.payment.order_id = "different-square-order";
-  assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "ignored", reason: "unrecognized_provider_order_id" });
-  assert.equal(firestore.docs.get("paymentTransactions/sandbox_charge_pay").providerOrderId, "square-order");
+  assert.deepEqual(await processSquareWebhook(args(firestore, collision)), { outcome: "invalid", reason: "transaction_identity_collision" });
+  assert.equal(firestore.docs.get("paymentTransactions/sandbox_charge_pay").providerOrderId, "tampered-provider-order");
 });

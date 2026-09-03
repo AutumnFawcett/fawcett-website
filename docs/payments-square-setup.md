@@ -54,7 +54,7 @@ The versioned catalogue is server-owned and accepts no custom amounts: `founder-
 
 The create-only initial document uses a server-generated ID of at most 40 characters and contains `orderId`, provider `square`, explicit environment, purpose `founder`, versioned `offerId`, safe integer `amountCents`, currency `CAD`, status, nullable `clientUid`, nullable `providerOrderId`, nullable `providerPaymentLinkId`, nullable `checkoutUrl`, stable `idempotencyKey`, timestamps, and nullable safe `failureCode`. Status is one of `creating`, `pending`, `creation_failed`, `paid`, `refunded`, or `disputed`. Conditional transactions prevent a second provider identity from being attached. Browser clients—including admins—cannot access this collection.
 
-The adapter accepts only trusted order and offer values and validates non-empty Square link/order IDs, an HTTPS `square.link` or `checkout.square.site` URL, and any returned order total/currency before persistence. Provider failures retain only `provider_creation_failed`; raw errors and secrets are not stored or logged.
+The adapter accepts only trusted order and offer values and validates non-empty Square link/order IDs, an HTTPS `square.link` or `checkout.square.site` URL, and any returned order total/currency before persistence. Provider-call failures retain only `provider_creation_failed`, while malformed provider responses retain only `provider_response_invalid`; raw errors and secrets are not stored or logged. If Square returns a valid link but the conditional Firestore attachment fails, the order remains `creating` with its original order ID and idempotency key for reconciliation. That persistence failure never returns the checkout URL and is not mislabeled as a provider failure.
 
 ## Local Sandbox testing
 
@@ -74,6 +74,10 @@ To rotate a token, Firebase credential, or Square webhook signature key, create 
 `SQUARE_PAYMENTS_ENABLED=false` is the payment-creation kill switch. Phase 1A does not create payments at all, and later checkout code must refuse new payment creation unless this value is exactly `true`. Disabling checkout must **not** disable the webhook route: refunds, disputes, delayed status changes, and already in-flight payments can arrive after new sales stop. Keep webhook verification and recording online until all in-flight transactions are reconciled and the provider retention window has passed.
 
 The service checks the kill switch before creating a Firestore record or invoking Square. If link creation or strict response validation fails, the order moves from `creating` to `creation_failed` with a safe code and can be reconciled without exposing provider details. Roll back checkout by setting the flag to `false`; continue processing webhooks for existing orders. A success/cancel browser redirect is presentation only and must never mark an order paid—only a verified, matched completed webhook can do so.
+
+An otherwise valid completed payment whose Square order ID has no mapping yet is recorded as `retryable_unlinked`, not terminally deduplicated. This permits an identical signed event to be processed after the trusted mapping becomes visible while continuing to report unrelated provider orders as ignored. Payload-hash collision checks still run before every retry, and processed events remain terminally idempotent.
+
+Phase 1A lifecycle assertions for signatures, event identity collisions, non-completed payment/refund states, refund order matching, dispute inheritance, retry behavior, and exactly-once effects remain covered. Assertions based on parsing the former compact `reference_id` convention were intentionally replaced by trusted `paymentOrders.providerOrderId` lookup assertions; the compact reference is no longer an authority, and an optional reference is now checked only for exact equality with the matched internal order ID.
 
 ## Record behavior
 
