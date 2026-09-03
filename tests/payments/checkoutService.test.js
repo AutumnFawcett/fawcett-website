@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createFounderCheckout } from "../../lib/payments/checkoutService.js";
+import { createFounderCheckout, reconcileFounderCheckout } from "../../lib/payments/checkoutService.js";
 import { assertMoney, FOUNDER_OFFERS } from "../../lib/payments/founderOffers.js";
 import { validatePaymentLinkResponse } from "../../lib/payments/paymentLinkValidation.js";
 import { canAttachProviderIdentity } from "../../lib/payments/paymentOrderState.js";
@@ -10,6 +10,7 @@ import { assertSquareCheckoutConfig } from "../../lib/payments/squareCheckoutCon
 function setup(response = { paymentLink: { id: "link-id", url: "https://square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } }) {
   const calls = []; let saved;
   return { calls, get saved() { return saved; }, config: { paymentsEnabled: true, environment: "sandbox", locationId: "loc" }, provider: { async createPaymentLink(value) { calls.push(["provider", value]); return response; } }, storage: {
+    async getOrder() { return saved; },
     async createOrder(value) { calls.push(["create", value]); saved = value; },
     async attachProviderIdentity(id, identity) { calls.push(["attach", id, identity]); Object.assign(saved, identity, { status: "pending" }); },
     async markCreationFailed(id, code) { calls.push(["failed", id, code]); saved.status = "creation_failed"; saved.failureCode = code; },
@@ -68,6 +69,19 @@ test("successful provider call followed by persistence failure remains recoverab
   assert.equal(s.calls.some(([name]) => name === "failed"), false);
   assert.equal(s.calls[1][1].order.orderId, error.orderId);
   assert.equal(s.calls[1][1].order.idempotencyKey, error.idempotencyKey);
+
+  s.storage.attachProviderIdentity = async (orderId, identity) => {
+    s.calls.push(["attach-retry", orderId, identity]);
+    Object.assign(s.saved, identity, { status: "pending" });
+  };
+  const recovered = await reconcileFounderCheckout({ orderId: error.orderId, config: s.config, storage: s.storage, provider: s.provider, now: () => "retry-now" });
+  assert.equal(recovered.orderId, "internal123");
+  assert.equal(recovered.idempotencyKey, "fawcett-internal123");
+  assert.equal(recovered.checkoutUrl, "https://square.link/u/test");
+  const providerCalls = s.calls.filter(([name]) => name === "provider");
+  assert.equal(providerCalls.length, 2);
+  assert.equal(providerCalls[1][1].order.orderId, providerCalls[0][1].order.orderId);
+  assert.equal(providerCalls[1][1].order.idempotencyKey, providerCalls[0][1].order.idempotencyKey);
 });
 test("only a pristine creating order can attach a provider identity", () => {
   const pristine = { status: "creating", providerOrderId: null, providerPaymentLinkId: null, checkoutUrl: null };
