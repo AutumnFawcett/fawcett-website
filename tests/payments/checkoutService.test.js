@@ -44,7 +44,41 @@ test("provider response validation is strict", () => {
     [(x) => { x.order.totalMoney.amount = 999; }, "provider_amount_mismatch"], [(x) => { x.order.totalMoney.currency = "USD"; }, "invalid_currency"],
   ]) { const value = structuredClone(valid); change(value); assert.throws(() => validatePaymentLinkResponse(value, order), new RegExp(message)); }
 });
-test("provider failure stores only a safe failure code", async () => { const s = setup(); s.provider.createPaymentLink = async () => { throw new Error("token-secret raw provider response"); }; await assert.rejects(run(s), /checkout_creation_failed/); assert.equal(s.saved.status, "creation_failed"); assert.equal(s.saved.failureCode, "provider_creation_failed"); assert.equal(JSON.stringify(s.saved).includes("token-secret"), false); });
+test("provider timeouts during create and reconciliation remain recoverable", async () => {
+  const s = setup();
+  s.provider.createPaymentLink = async (values) => {
+    s.calls.push(["provider", values]);
+    throw new Error("raw timeout with provider secret");
+  };
+  let initialError;
+  try { await run(s); } catch (error) { initialError = error; }
+  assert.equal(initialError.message, "checkout_outcome_unknown");
+  assert.equal(initialError.orderId, "internal123");
+  assert.equal(initialError.idempotencyKey, "fawcett-internal123");
+  assert.equal("checkoutUrl" in initialError, false);
+  assert.equal(JSON.stringify(initialError).includes("provider secret"), false);
+  assert.equal(s.saved.status, "creating");
+  assert.equal(s.saved.failureCode, null);
+  assert.equal(s.calls.some(([name]) => name === "failed"), false);
+
+  let retryError;
+  try { await reconcileFounderCheckout({ orderId: "internal123", config: s.config, storage: s.storage, provider: s.provider, now: () => "retry" }); } catch (error) { retryError = error; }
+  assert.equal(retryError.message, "checkout_outcome_unknown");
+  assert.equal(s.saved.status, "creating");
+  assert.equal(s.saved.failureCode, null);
+
+  const response = { paymentLink: { id: "link-id", url: "https://square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } };
+  s.provider.createPaymentLink = async (values) => { s.calls.push(["provider", values]); return response; };
+  const recovered = await reconcileFounderCheckout({ orderId: "internal123", config: s.config, storage: s.storage, provider: s.provider, now: () => "recovered" });
+  assert.equal(recovered.checkoutUrl, "https://square.link/u/test");
+  assert.equal(s.calls.filter(([name]) => name === "attach").length, 1);
+  const providerCalls = s.calls.filter(([name]) => name === "provider");
+  assert.equal(providerCalls.length, 3);
+  for (const call of providerCalls) {
+    assert.equal(call[1].order.orderId, "internal123");
+    assert.equal(call[1].order.idempotencyKey, "fawcett-internal123");
+  }
+});
 test("invalid provider response uses a distinct safe failure code", async () => {
   const s = setup({ paymentLink: { id: "", url: "provider-secret" } });
   await assert.rejects(run(s), /checkout_response_invalid/);
@@ -82,6 +116,20 @@ test("successful provider call followed by persistence failure remains recoverab
   assert.equal(providerCalls.length, 2);
   assert.equal(providerCalls[1][1].order.orderId, providerCalls[0][1].order.orderId);
   assert.equal(providerCalls[1][1].order.idempotencyKey, providerCalls[0][1].order.idempotencyKey);
+});
+test("reconciliation rejects an embedded order ID mismatch before provider invocation", async () => {
+  const s = setup();
+  await s.storage.createOrder({
+    orderId: "different-id", provider: "square", environment: "sandbox", purpose: "founder",
+    offerId: "founder-10-v1", amountCents: 1000, currency: "CAD", status: "creating",
+    providerOrderId: null, providerPaymentLinkId: null, checkoutUrl: null,
+    idempotencyKey: "fawcett-different-id", failureCode: null,
+  });
+  await assert.rejects(
+    reconcileFounderCheckout({ orderId: "document-id", config: s.config, storage: s.storage, provider: s.provider }),
+    /order_not_recoverable/,
+  );
+  assert.equal(s.calls.filter(([name]) => name === "provider").length, 0);
 });
 test("only a pristine creating order can attach a provider identity", () => {
   const pristine = { status: "creating", providerOrderId: null, providerPaymentLinkId: null, checkoutUrl: null };
