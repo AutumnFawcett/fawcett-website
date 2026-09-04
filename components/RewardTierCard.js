@@ -1,6 +1,7 @@
 import { formatCampaignCurrency } from "@/lib/foundersCampaign";
+import FounderCheckoutButton from "@/components/FounderCheckoutButton";
 
-export default function RewardTierCard({ tier, featured = false }) {
+export default function RewardTierCard({ tier, featured = false, checkoutEnabled = false }) {
   return (
     <article className={`founders-tier${featured ? " founders-tier-featured" : ""}`}>
       <div className="founders-tier-topline">
@@ -14,9 +15,7 @@ export default function RewardTierCard({ tier, featured = false }) {
           <li key={reward}>{reward}</li>
         ))}
       </ul>
-      <div className="founders-tier-status" aria-label="This reward tier is not available yet">
-        Available at launch
-      </div>
+      <FounderCheckoutButton offerId={tier.offerId} enabled={checkoutEnabled} />
     </article>
   );
 }

@@ -47,3 +47,17 @@ test("paymentOrders are inaccessible to unauthenticated and non-admin clients", 
     await assertFails(deleteDoc(ref));
   }
 });
+
+test("checkout idempotency and rate-limit state is server-only for every browser identity", async () => {
+  await seed("adminUsers", "admin", { active: true });
+  for (const collection of ["paymentCheckoutRequests", "paymentCheckoutRateLimits"]) {
+    await seed(collection, "record", { clientUid: "client" });
+    for (const db of [env.unauthenticatedContext().firestore(), env.authenticatedContext("client").firestore(), env.authenticatedContext("admin").firestore()]) {
+      const ref = doc(db, collection, "record");
+      await assertFails(getDoc(ref));
+      await assertFails(setDoc(ref, { clientUid: "client" }));
+      await assertFails(updateDoc(ref, { count: 2 }));
+      await assertFails(deleteDoc(ref));
+    }
+  }
+});
