@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { auth } from "@/lib/firebaseClient";
+import { buildFounderCheckoutBody, validateFounderCheckoutResult } from "@/lib/payments/founderCheckoutClient";
 
 function requestId() {
   return crypto.randomUUID().replaceAll("-", "");
@@ -28,11 +29,11 @@ export default function FounderCheckoutButton({ offerId, enabled }) {
       const response = await fetch("/api/payments/checkout/founder", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId, requestId: retryId.current ||= requestId() }),
+        body: JSON.stringify(buildFounderCheckoutBody(offerId, retryId.current ||= requestId())),
       });
       const result = await response.json();
-      if (!response.ok || typeof result.orderId !== "string" || typeof result.checkoutUrl !== "string" || !/^https:\/\/(square\.link|checkout\.square\.site)\//.test(result.checkoutUrl)) throw new Error("checkout_failed");
-      window.location.assign(result.checkoutUrl);
+      const checkoutResult = validateFounderCheckoutResult(response, result);
+      window.location.assign(checkoutResult.checkoutUrl);
     } catch {
       setError("Checkout could not be started. Please try again.");
       setWorking(false);

@@ -46,3 +46,14 @@ test("ambiguous and persistence-pending outcomes never return URLs", async () =>
     const response = await handleFounderCheckoutRequest(request(), deps.value); assert.equal(response.status, 503); assert.deepEqual(await response.json(), { error: code });
   }
 });
+test("stored inconsistency receives a stable no-store internal error", async () => {
+  const deps = dependencies({ checkout: async () => { throw new Error("checkout_request_inconsistent: secret/path"); } });
+  const response = await handleFounderCheckoutRequest(request(), deps.value);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "service_unavailable" });
+
+  deps.value.checkout = async () => { throw new Error("checkout_request_inconsistent"); };
+  const mapped = await handleFounderCheckoutRequest(request(), deps.value);
+  assert.equal(mapped.status, 500); assert.equal(mapped.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await mapped.json(), { error: "internal_inconsistency" });
+});
