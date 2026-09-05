@@ -28,8 +28,11 @@ test("configuration failures log only safe diagnostics and preserve the response
 
   assert.equal(result.status, 503);
   assert.deepEqual(await result.json(), { outcome: "retryable", reason: "server_configuration_unavailable" });
-  assert.deepEqual(deps.entries, [{ stage: "configuration", name: "ConfigError", code: "SQUARE_CONFIG", message: "invalid [redacted]" }]);
-  assert.equal(JSON.stringify(deps.entries).includes(secret), false);
+  assert.deepEqual(deps.entries, [
+    '[square-webhook-failure] {"stage":"configuration","name":"ConfigError","code":"SQUARE_CONFIG","message":"invalid [redacted]"}',
+  ]);
+  assert.equal(typeof deps.entries[0], "string");
+  assert.equal(deps.entries[0].includes(secret), false);
   delete process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
 });
 
@@ -43,7 +46,10 @@ test("processing failures log only safe diagnostics and preserve the response", 
 
   assert.equal(result.status, 503);
   assert.deepEqual(await result.json(), { outcome: "retryable", reason: "processing_unavailable" });
-  assert.deepEqual(deps.entries, [{ stage: "processing", name: "FirestoreError", code: "unavailable", message: "database temporarily unavailable" }]);
-  assert.equal(JSON.stringify(deps.entries).includes("request-token"), false);
-  assert.equal(JSON.stringify(deps.entries).includes("private-customer"), false);
+  assert.deepEqual(deps.entries, [
+    '[square-webhook-failure] {"stage":"processing","name":"FirestoreError","code":"unavailable","message":"database temporarily unavailable"}',
+  ]);
+  assert.equal(typeof deps.entries[0], "string");
+  assert.equal(deps.entries[0].includes("request-token"), false);
+  assert.equal(deps.entries[0].includes("private-customer"), false);
 });
