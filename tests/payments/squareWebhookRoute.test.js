@@ -17,39 +17,83 @@ function dependencies(overrides = {}) {
   };
 }
 
-test("configuration failures log only safe diagnostics and preserve the response", async () => {
+function setVercelEnvironment(value) {
+  const original = process.env.VERCEL_ENV;
+  if (value === undefined) delete process.env.VERCEL_ENV;
+  else process.env.VERCEL_ENV = value;
+  return () => {
+    if (original === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = original;
+  };
+}
+
+test("Preview configuration failures return the same safe diagnostic used by formatted logging", async () => {
+  const restoreEnvironment = setVercelEnvironment("preview");
   const secret = "configuration-private-value";
   process.env.SQUARE_WEBHOOK_SIGNATURE_KEY = secret;
-  const deps = dependencies({
-    getConfig: () => { const error = new Error(`invalid signature key=${secret}`); error.name = "ConfigError"; error.code = "SQUARE_CONFIG"; throw error; },
-  });
+  try {
+    const deps = dependencies({
+      getConfig: () => { const error = new Error(`invalid signature key=${secret}`); error.name = "ConfigError"; error.code = "SQUARE_CONFIG"; throw error; },
+    });
 
-  const result = await handleSquareWebhookRequest(new Request("https://example.test/hook"), deps.value);
+    const result = await handleSquareWebhookRequest(new Request("https://example.test/hook"), deps.value);
 
-  assert.equal(result.status, 503);
-  assert.deepEqual(await result.json(), { outcome: "retryable", reason: "server_configuration_unavailable" });
-  assert.deepEqual(deps.entries, [
-    '[square-webhook-failure] {"stage":"configuration","name":"ConfigError","code":"SQUARE_CONFIG","message":"invalid [redacted]"}',
-  ]);
-  assert.equal(typeof deps.entries[0], "string");
-  assert.equal(deps.entries[0].includes(secret), false);
-  delete process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
+    assert.equal(result.status, 503);
+    assert.deepEqual(await result.json(), {
+      outcome: "retryable",
+      reason: "server_configuration_unavailable",
+      diagnostic: { stage: "configuration", name: "ConfigError", code: "SQUARE_CONFIG", message: "invalid [redacted]" },
+    });
+    assert.deepEqual(deps.entries, [
+      '[square-webhook-failure] {"stage":"configuration","name":"ConfigError","code":"SQUARE_CONFIG","message":"invalid [redacted]"}',
+    ]);
+    assert.equal(typeof deps.entries[0], "string");
+    assert.equal(deps.entries[0].includes(secret), false);
+  } finally {
+    delete process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
+    restoreEnvironment();
+  }
 });
 
-test("processing failures log only safe diagnostics and preserve the response", async () => {
-  const deps = dependencies({
-    handleWebhook: async () => { const error = new Error("database temporarily unavailable"); error.name = "FirestoreError"; error.code = "unavailable"; throw error; },
+for (const environment of ["production", undefined]) {
+  test(`${environment ?? "local"} processing failures keep the response generic`, async () => {
+    const restoreEnvironment = setVercelEnvironment(environment);
+    try {
+      const deps = dependencies({
+        handleWebhook: async () => { const error = new Error("database temporarily unavailable"); error.name = "FirestoreError"; error.code = "unavailable"; throw error; },
+      });
+      const request = new Request("https://example.test/hook", { method: "POST", headers: { authorization: "Bearer request-token" }, body: JSON.stringify({ customer: "private-customer" }) });
+
+      const result = await handleSquareWebhookRequest(request, deps.value);
+
+      assert.equal(result.status, 503);
+      assert.deepEqual(await result.json(), { outcome: "retryable", reason: "processing_unavailable" });
+      assert.deepEqual(deps.entries, [
+        '[square-webhook-failure] {"stage":"processing","name":"FirestoreError","code":"unavailable","message":"database temporarily unavailable"}',
+      ]);
+      assert.equal(deps.entries[0].includes("request-token"), false);
+      assert.equal(deps.entries[0].includes("private-customer"), false);
+    } finally {
+      restoreEnvironment();
+    }
   });
-  const request = new Request("https://example.test/hook", { method: "POST", headers: { authorization: "Bearer request-token" }, body: JSON.stringify({ customer: "private-customer" }) });
+}
 
-  const result = await handleSquareWebhookRequest(request, deps.value);
+for (const result of [
+  { status: 200, body: { outcome: "processed" } },
+  { status: 400, body: { outcome: "invalid", reason: "malformed_json" } },
+]) {
+  test(`Preview ${result.status} webhook responses do not include diagnostics`, async () => {
+    const restoreEnvironment = setVercelEnvironment("preview");
+    try {
+      const deps = dependencies({ handleWebhook: async () => result });
+      const response = await handleSquareWebhookRequest(new Request("https://example.test/hook"), deps.value);
 
-  assert.equal(result.status, 503);
-  assert.deepEqual(await result.json(), { outcome: "retryable", reason: "processing_unavailable" });
-  assert.deepEqual(deps.entries, [
-    '[square-webhook-failure] {"stage":"processing","name":"FirestoreError","code":"unavailable","message":"database temporarily unavailable"}',
-  ]);
-  assert.equal(typeof deps.entries[0], "string");
-  assert.equal(deps.entries[0].includes("request-token"), false);
-  assert.equal(deps.entries[0].includes("private-customer"), false);
-});
+      assert.equal(response.status, result.status);
+      assert.deepEqual(await response.json(), result.body);
+      assert.deepEqual(deps.entries, []);
+    } finally {
+      restoreEnvironment();
+    }
+  });
+}
