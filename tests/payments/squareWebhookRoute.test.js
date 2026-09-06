@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleSquareWebhookRequest } from "../../lib/payments/squareWebhookRoute.js";
+import { handleFirebaseAdminConnectivityRequest, handleSquareWebhookRequest } from "../../lib/payments/squareWebhookRoute.js";
 
 function dependencies(overrides = {}) {
   const entries = [];
@@ -97,3 +97,74 @@ for (const result of [
     }
   });
 }
+
+test("Preview Firebase Admin connectivity performs one harmless read", async () => {
+  const calls = [];
+  const response = await handleFirebaseAdminConnectivityRequest({
+    vercelEnvironment: "preview",
+    getFirebaseAdmin: () => ({
+      firestore: {
+        collection: (name) => {
+          calls.push(["collection", name]);
+          return {
+            doc: (id) => {
+              calls.push(["doc", id]);
+              return { get: async () => { calls.push(["get"]); } };
+            },
+          };
+        },
+      },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(calls, [["collection", "__diagnostics__"], ["doc", "firebase-admin-connection"], ["get"]]);
+});
+
+test("Preview Firebase Admin connectivity failures return only a sanitized diagnostic", async () => {
+  const secret = "firebase-private-value";
+  process.env.FIREBASE_ADMIN_PRIVATE_KEY = secret;
+  try {
+    const response = await handleFirebaseAdminConnectivityRequest({
+      vercelEnvironment: "preview",
+      getFirebaseAdmin: () => {
+        const error = new Error(`private key=${secret}`);
+        error.name = "FirebaseError";
+        error.code = "admin/unavailable";
+        error.stack = "sensitive stack";
+        throw error;
+      },
+    });
+
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.deepEqual(await response.json(), {
+      ok: false,
+      diagnostic: {
+        stage: "firebase_connectivity",
+        name: "FirebaseError",
+        code: "admin/unavailable",
+        message: "[redacted]",
+      },
+    });
+  } finally {
+    delete process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+  }
+});
+
+test("non-Preview Firebase Admin connectivity remains unavailable without initialization", async () => {
+  for (const vercelEnvironment of ["production", undefined]) {
+    let initialized = false;
+    const response = await handleFirebaseAdminConnectivityRequest({
+      vercelEnvironment,
+      getFirebaseAdmin: () => { initialized = true; throw new Error("must not initialize"); },
+    });
+
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.deepEqual(await response.json(), { error: "method_not_allowed" });
+    assert.equal(initialized, false);
+  }
+});
