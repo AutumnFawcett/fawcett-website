@@ -120,7 +120,7 @@ test("Preview Firebase Admin connectivity performs one harmless read", async () 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   assert.deepEqual(await response.json(), { ok: true });
-  assert.deepEqual(calls, [["collection", "__diagnostics__"], ["doc", "firebase-admin-connection"], ["get"]]);
+  assert.deepEqual(calls, [["collection", "fawcett_diagnostics"], ["doc", "firebase-admin-connection"], ["get"]]);
 });
 
 test("Preview Firebase Admin connectivity failures return only a sanitized diagnostic", async () => {
