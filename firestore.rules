@@ -311,6 +311,20 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /founderCounters/{counterId} {
+      allow read, write: if false;
+    }
+
+    match /founderContributions/{contributionId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /founderProfiles/{profileId} {
+      allow read: if isAdmin() || ownsRecord();
+      allow create, update, delete: if false;
+    }
+
     match /membershipOffers/{offerId} {
       allow create: if isAdmin();
       allow read: if isAdmin() || ownsRecord();

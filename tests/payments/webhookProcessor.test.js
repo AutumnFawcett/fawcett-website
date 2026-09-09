@@ -5,8 +5,8 @@ import { processSquareWebhook } from "../../lib/payments/webhookProcessor.js";
 class MemoryFirestore {
   constructor() {
     this.docs = new Map(); this.queue = Promise.resolve(); this.failOnce = false;
-    this.docs.set("paymentOrders/order", { orderId: "order", provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
-    this.docs.set("paymentOrders/order-production", { orderId: "order-production", provider: "square", environment: "production", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
+    this.docs.set("paymentOrders/order", { orderId: "order", clientUid: "client", offerId: "founder-10-v1", offerVersion: 1, provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
+    this.docs.set("paymentOrders/order-production", { orderId: "order-production", clientUid: "client", offerId: "founder-10-v1", offerVersion: 1, provider: "square", environment: "production", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
   }
   collection(name) {
     const query = { collection: name, filters: [], where(field, op, value) { return Object.assign(Object.create(this), { filters: [...this.filters, [field, op, value]] }); }, limit(count) { return Object.assign(Object.create(this), { limitCount: count }); } };
@@ -40,12 +40,24 @@ function event(id = "evt") { return { event_id: id, type: "payment.updated", loc
 const now = () => "trusted-time";
 const args = (firestore, value, environment = "sandbox") => ({ firestore, environment, locationId: "loc", event: value, rawBody: JSON.stringify(value), now });
 const transactions = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("paymentTransactions/"));
+const profiles = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("founderProfiles/"));
+const contributions = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("founderContributions/"));
+function addSecondFounderPayment(firestore, id = "second") {
+  firestore.docs.set("paymentOrders/order-two", { orderId: "order-two", clientUid: "client", offerId: "founder-10-v1", offerVersion: 1, provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order-two", status: "pending" });
+  const value = event(id);
+  Object.assign(value.data.object.payment, { id: "pay-two", order_id: "square-order-two", reference_id: "order-two" });
+  return value;
+}
 test("first delivery and exact duplicate create one logical effect", async () => {
   const firestore = new MemoryFirestore(); const value = event(); const rawBody = JSON.stringify(value);
   assert.equal((await processSquareWebhook({ firestore, environment: "sandbox", locationId: "loc", event: value, rawBody, now })).outcome, "processed");
   assert.equal((await processSquareWebhook({ firestore, environment: "sandbox", locationId: "loc", event: value, rawBody, now })).duplicate, true);
   assert.equal([...firestore.docs.keys()].filter((key) => key.startsWith("paymentTransactions/")).length, 1);
   assert.equal(firestore.docs.get("paymentOrders/order").status, "paid");
+  assert.equal(profiles(firestore).length, 1);
+  assert.equal(contributions(firestore).length, 1);
+  assert.equal(profiles(firestore)[0][1].founderNumber, 1);
+  assert.equal(profiles(firestore)[0][1].recognitionMode, "anonymous");
 });
 
 test("completed event before provider-order linkage is retried after linkage", async () => {
@@ -58,7 +70,7 @@ test("completed event before provider-order linkage is retried after linkage", a
   const eventRecord = [...firestore.docs.entries()].find(([path]) => path.startsWith("paymentWebhookEvents/"))[1];
   assert.equal(eventRecord.processingState, "retryable_unlinked");
 
-  firestore.docs.set("paymentOrders/order", { orderId: "order", provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
+  firestore.docs.set("paymentOrders/order", { orderId: "order", clientUid: "client", offerId: "founder-10-v1", offerVersion: 1, provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order", status: "pending" });
   assert.equal((await processSquareWebhook(args(firestore, value))).outcome, "processed");
   assert.equal(transactions(firestore).length, 1);
   assert.equal((await processSquareWebhook(args(firestore, value))).duplicate, true);
@@ -92,6 +104,18 @@ test("sandbox and production records are separate", async () => {
   assert.equal([...firestore.docs.keys()].filter((key) => key.startsWith("paymentWebhookEvents/")).length, 2);
 });
 
+test("sandbox and production Founder profiles and counters are isolated", async () => {
+  const firestore = new MemoryFirestore();
+  await processSquareWebhook(args(firestore, event("sandbox-founder")));
+  const production = event("production-founder");
+  production.data.object.payment.reference_id = "order-production";
+  await processSquareWebhook(args(firestore, production, "production"));
+  assert.equal(profiles(firestore).length, 2);
+  assert.equal(firestore.docs.get("founderCounters/sandbox").nextNumber, 2);
+  assert.equal(firestore.docs.get("founderCounters/production").nextNumber, 2);
+  assert.deepEqual(profiles(firestore).map(([, profile]) => profile.environment).sort(), ["production", "sandbox"]);
+});
+
 test("pending and approved events do not block a later completed charge", async () => {
   for (const initialStatus of ["PENDING", "APPROVED"]) {
     const firestore = new MemoryFirestore();
@@ -118,6 +142,8 @@ test("different completed event IDs for one payment create one charge", async ()
   assert.equal((await processSquareWebhook(args(firestore, event("completed-one")))).outcome, "processed");
   assert.equal((await processSquareWebhook(args(firestore, event("completed-two")))).outcome, "processed");
   assert.equal(transactions(firestore).length, 1);
+  assert.equal(contributions(firestore).length, 1);
+  assert.equal(profiles(firestore)[0][1].confirmedContributionCents, 1000);
 });
 
 function refundEvent(id, status, amount = 250) {
@@ -143,6 +169,104 @@ test("dispute lifecycle creates at most one withheld-funds effect and WON create
   assert.equal((await processSquareWebhook(args(firestore, dispute("won", "WON")))).outcome, "ignored");
   assert.equal(transactions(firestore).length, 2);
   assert.equal(firestore.docs.has("paymentTransactions/sandbox_reversal_dispute"), false);
+  assert.equal(contributions(firestore).length, 2);
+  assert.equal(profiles(firestore)[0][1].status, "disputed_hold");
+  assert.equal(profiles(firestore)[0][1].eligibleContributionCents, 0);
+});
+
+test("repeat payments retain one number, accumulate, and upgrade at exact thresholds", async () => {
+  const firestore = new MemoryFirestore();
+  await processSquareWebhook(args(firestore, event("first")));
+  firestore.docs.set("paymentOrders/order-two", { orderId: "order-two", clientUid: "client", offerId: "digital-founder-25-v1", offerVersion: 1, provider: "square", environment: "sandbox", purpose: "founder", amountCents: 2500, currency: "CAD", providerOrderId: "square-order-two", status: "pending" });
+  const second = event("second");
+  Object.assign(second.data.object.payment, { id: "pay-two", order_id: "square-order-two", reference_id: "order-two", amount_money: { amount: 2500, currency: "CAD" } });
+  await processSquareWebhook(args(firestore, second));
+  const profile = profiles(firestore)[0][1];
+  assert.equal(profiles(firestore).length, 1);
+  assert.equal(profile.founderNumber, 1);
+  assert.equal(profile.confirmedContributionCents, 3500);
+  assert.equal(profile.earnedTierId, "digital-founder-25-v1");
+  assert.equal(contributions(firestore).length, 2);
+});
+
+test("different clients get distinct permanent numbers", async () => {
+  const firestore = new MemoryFirestore();
+  await processSquareWebhook(args(firestore, event("first")));
+  firestore.docs.set("paymentOrders/other-order", { orderId: "other-order", clientUid: "other", offerId: "founder-10-v1", offerVersion: 1, provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "other-square-order", status: "pending" });
+  const other = event("other"); Object.assign(other.data.object.payment, { id: "other-pay", order_id: "other-square-order", reference_id: "other-order" });
+  await processSquareWebhook(args(firestore, other));
+  assert.deepEqual(profiles(firestore).map(([, profile]) => profile.founderNumber).sort(), [1, 2]);
+});
+
+test("partial and excessive refunds preserve history and clamp eligibility at zero", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("charge")));
+  const partial = refundEvent("partial", "COMPLETED", 250); partial.data.object.refund.id = "refund-partial";
+  await processSquareWebhook(args(firestore, partial));
+  const excessive = refundEvent("excessive", "COMPLETED", 2000); excessive.data.object.refund.id = "refund-excessive";
+  await processSquareWebhook(args(firestore, excessive));
+  const profile = profiles(firestore)[0][1];
+  assert.equal(profile.refundedContributionCents, 2250);
+  assert.equal(profile.eligibleContributionCents, 0);
+  assert.equal(profile.founderNumber, 1);
+  assert.equal(profile.earnedTierId, null);
+  assert.equal(contributions(firestore).length, 3);
+});
+
+test("Founder validation failure rolls back every webhook financial and entitlement write", async () => {
+  const firestore = new MemoryFirestore();
+  firestore.docs.get("paymentOrders/order").offerVersion = 99;
+  await assert.rejects(processSquareWebhook(args(firestore, event("bad-offer"))), /founder_entitlement_offer_mismatch/);
+  assert.equal(firestore.docs.get("paymentOrders/order").status, "pending");
+  assert.equal(transactions(firestore).length, 0);
+  assert.equal(profiles(firestore).length, 0);
+  assert.equal(contributions(firestore).length, 0);
+  assert.equal([...firestore.docs.keys()].filter((key) => key.startsWith("paymentWebhookEvents/")).length, 0);
+});
+
+test("later contributions preserve a valid public recognition preference", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  const profile = profiles(firestore)[0][1];
+  profile.recognitionMode = "public"; profile.publicRecognitionEnabled = true;
+  await processSquareWebhook(args(firestore, addSecondFounderPayment(firestore, "public-later")));
+  const updated = profiles(firestore)[0][1];
+  assert.equal(updated.recognitionMode, "public");
+  assert.equal(updated.publicRecognitionEnabled, true);
+  assert.equal(updated.confirmedContributionCents, 2000);
+});
+
+test("unknown or inconsistent recognition preferences fail closed", async () => {
+  for (const [recognitionMode, publicRecognitionEnabled] of [["anonymous", true], ["public", false], ["unknown", false]]) {
+    const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+    const profile = profiles(firestore)[0][1];
+    Object.assign(profile, { recognitionMode, publicRecognitionEnabled });
+    await assert.rejects(processSquareWebhook(args(firestore, addSecondFounderPayment(firestore, `invalid-${recognitionMode}-${publicRecognitionEnabled}`))), /founder_profile_collision/);
+    assert.equal(profile.confirmedContributionCents, 1000);
+    assert.equal(contributions(firestore).length, 1);
+  }
+});
+
+test("calculated Founder aggregate overflow fails closed", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  const profile = profiles(firestore)[0][1];
+  profile.confirmedContributionCents = Number.MAX_SAFE_INTEGER;
+  profile.eligibleContributionCents = Number.MAX_SAFE_INTEGER;
+  await assert.rejects(processSquareWebhook(args(firestore, addSecondFounderPayment(firestore, "overflow"))), /founder_aggregate_overflow/);
+  assert.equal(profile.confirmedContributionCents, Number.MAX_SAFE_INTEGER);
+  assert.equal(contributions(firestore).length, 1);
+});
+
+test("duplicate contribution fails closed when its linked profile is missing", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  firestore.docs.delete(profiles(firestore)[0][0]);
+  await assert.rejects(processSquareWebhook(args(firestore, event("same-payment-new-event"))), /founder_profile_missing_for_contribution/);
+  assert.equal(contributions(firestore).length, 1);
+});
+
+test("duplicate contribution fails closed when its linked profile is inconsistent", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  profiles(firestore)[0][1].clientUid = "other";
+  await assert.rejects(processSquareWebhook(args(firestore, event("same-payment-inconsistent-profile"))), /founder_profile_collision/);
+  assert.equal(contributions(firestore).length, 1);
 });
 
 test("transaction ID collision with inconsistent amount is rejected", async () => {
