@@ -10,9 +10,9 @@ function dependencies(overrides = {}) {
   const calls = [];
   return { calls, value: {
     authenticate: async () => "verified-uid",
-    getConfig: () => ({ paymentsEnabled: true }),
+    getConfig: () => ({ paymentsEnabled: true, environment: "sandbox" }),
     getCheckoutDependencies: async () => { calls.push("dependencies"); return {}; },
-    checkout: async (values) => { calls.push(values); return { orderId: "internal", checkoutUrl: "https://square.link/u/safe", providerOrderId: "not-returned" }; },
+    checkout: async (values) => { calls.push(values); return { orderId: "internal", checkoutUrl: "https://sandbox.square.link/u/safe", providerOrderId: "not-returned" }; },
     ...overrides,
   } };
 }
@@ -20,8 +20,21 @@ function dependencies(overrides = {}) {
 test("checkout API authenticates and returns only safe no-store fields", async () => {
   const deps = dependencies(); const response = await handleFounderCheckoutRequest(request(), deps.value);
   assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.deepEqual(await response.json(), { orderId: "internal", checkoutUrl: "https://square.link/u/safe" });
+  assert.deepEqual(await response.json(), { orderId: "internal", checkoutUrl: "https://sandbox.square.link/u/safe" });
   assert.equal(deps.calls[1].clientUid, "verified-uid");
+});
+test("checkout API validates its final result against the configured environment", async () => {
+  for (const [environment, checkoutUrl] of [["sandbox", "https://sandbox.square.link/u/safe"], ["production", "https://square.link/u/safe"], ["production", "https://checkout.square.site/u/safe"]]) {
+    const deps = dependencies({ getConfig: () => ({ paymentsEnabled: true, environment }), checkout: async () => ({ orderId: "internal", checkoutUrl }) });
+    assert.equal((await handleFounderCheckoutRequest(request(), deps.value)).status, 200);
+  }
+  for (const [environment, checkoutUrl] of [["production", "https://sandbox.square.link/u/safe"], ["sandbox", "https://square.link/u/safe"], ["sandbox", "https://checkout.square.site/u/safe"]]) {
+    const deps = dependencies({ getConfig: () => ({ paymentsEnabled: true, environment }), checkout: async () => ({ orderId: "internal", checkoutUrl }) });
+    const response = await handleFounderCheckoutRequest(request(), deps.value);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "service_unavailable" });
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  }
 });
 test("disabled checkout stops before storage/provider dependencies", async () => {
   const deps = dependencies({ getConfig: () => ({ paymentsEnabled: false }) });
