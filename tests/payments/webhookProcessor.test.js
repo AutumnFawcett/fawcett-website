@@ -42,6 +42,12 @@ const args = (firestore, value, environment = "sandbox") => ({ firestore, enviro
 const transactions = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("paymentTransactions/"));
 const profiles = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("founderProfiles/"));
 const contributions = (firestore) => [...firestore.docs.entries()].filter(([key]) => key.startsWith("founderContributions/"));
+function addSecondFounderPayment(firestore, id = "second") {
+  firestore.docs.set("paymentOrders/order-two", { orderId: "order-two", clientUid: "client", offerId: "founder-10-v1", offerVersion: 1, provider: "square", environment: "sandbox", purpose: "founder", amountCents: 1000, currency: "CAD", providerOrderId: "square-order-two", status: "pending" });
+  const value = event(id);
+  Object.assign(value.data.object.payment, { id: "pay-two", order_id: "square-order-two", reference_id: "order-two" });
+  return value;
+}
 test("first delivery and exact duplicate create one logical effect", async () => {
   const firestore = new MemoryFirestore(); const value = event(); const rawBody = JSON.stringify(value);
   assert.equal((await processSquareWebhook({ firestore, environment: "sandbox", locationId: "loc", event: value, rawBody, now })).outcome, "processed");
@@ -215,6 +221,52 @@ test("Founder validation failure rolls back every webhook financial and entitlem
   assert.equal(profiles(firestore).length, 0);
   assert.equal(contributions(firestore).length, 0);
   assert.equal([...firestore.docs.keys()].filter((key) => key.startsWith("paymentWebhookEvents/")).length, 0);
+});
+
+test("later contributions preserve a valid public recognition preference", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  const profile = profiles(firestore)[0][1];
+  profile.recognitionMode = "public"; profile.publicRecognitionEnabled = true;
+  await processSquareWebhook(args(firestore, addSecondFounderPayment(firestore, "public-later")));
+  const updated = profiles(firestore)[0][1];
+  assert.equal(updated.recognitionMode, "public");
+  assert.equal(updated.publicRecognitionEnabled, true);
+  assert.equal(updated.confirmedContributionCents, 2000);
+});
+
+test("unknown or inconsistent recognition preferences fail closed", async () => {
+  for (const [recognitionMode, publicRecognitionEnabled] of [["anonymous", true], ["public", false], ["unknown", false]]) {
+    const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+    const profile = profiles(firestore)[0][1];
+    Object.assign(profile, { recognitionMode, publicRecognitionEnabled });
+    await assert.rejects(processSquareWebhook(args(firestore, addSecondFounderPayment(firestore, `invalid-${recognitionMode}-${publicRecognitionEnabled}`))), /founder_profile_collision/);
+    assert.equal(profile.confirmedContributionCents, 1000);
+    assert.equal(contributions(firestore).length, 1);
+  }
+});
+
+test("calculated Founder aggregate overflow fails closed", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  const profile = profiles(firestore)[0][1];
+  profile.confirmedContributionCents = Number.MAX_SAFE_INTEGER;
+  profile.eligibleContributionCents = Number.MAX_SAFE_INTEGER;
+  await assert.rejects(processSquareWebhook(args(firestore, addSecondFounderPayment(firestore, "overflow"))), /founder_aggregate_overflow/);
+  assert.equal(profile.confirmedContributionCents, Number.MAX_SAFE_INTEGER);
+  assert.equal(contributions(firestore).length, 1);
+});
+
+test("duplicate contribution fails closed when its linked profile is missing", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  firestore.docs.delete(profiles(firestore)[0][0]);
+  await assert.rejects(processSquareWebhook(args(firestore, event("same-payment-new-event"))), /founder_profile_missing_for_contribution/);
+  assert.equal(contributions(firestore).length, 1);
+});
+
+test("duplicate contribution fails closed when its linked profile is inconsistent", async () => {
+  const firestore = new MemoryFirestore(); await processSquareWebhook(args(firestore, event("first")));
+  profiles(firestore)[0][1].clientUid = "other";
+  await assert.rejects(processSquareWebhook(args(firestore, event("same-payment-inconsistent-profile"))), /founder_profile_collision/);
+  assert.equal(contributions(firestore).length, 1);
 });
 
 test("transaction ID collision with inconsistent amount is rejected", async () => {
