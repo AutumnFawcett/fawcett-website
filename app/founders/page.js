@@ -12,6 +12,7 @@ export const metadata = {
 export default function FoundersPage() {
   const campaign = foundersCampaign;
   const checkoutEnabled = process.env.SQUARE_PAYMENTS_ENABLED === "true";
+  const checkoutEnvironment = process.env.SQUARE_ENVIRONMENT;
 
   return (
     <main className="founders-page">
@@ -107,6 +108,7 @@ export default function FoundersPage() {
                 tier={tier}
                 featured={tier.amountCents === 10000}
                 checkoutEnabled={checkoutEnabled}
+                checkoutEnvironment={checkoutEnvironment}
               />
             ))}
             <article className="founders-tier founders-tier-custom">

@@ -7,7 +7,7 @@ import { canAttachProviderIdentity } from "../../lib/payments/paymentOrderState.
 import { squarePaymentLinkRequest } from "../../lib/payments/squarePaymentLinkRequest.js";
 import { assertSquareCheckoutConfig } from "../../lib/payments/squareCheckoutConfig.js";
 
-function setup(response = { paymentLink: { id: "link-id", url: "https://square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } }) {
+function setup(response = { paymentLink: { id: "link-id", url: "https://sandbox.square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } }) {
   const calls = []; let saved;
   return { calls, get saved() { return saved; }, config: { paymentsEnabled: true, environment: "sandbox", locationId: "loc" }, provider: { async createPaymentLink(value) { calls.push(["provider", value]); return response; } }, storage: {
     async getOrder() { return saved; },
@@ -36,13 +36,24 @@ test("catalogue has fixed CAD safe-integer amounts", () => { assert.deepEqual(Ob
 test("Money validation never coerces malformed values", () => { for (const x of ["1", -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => assertMoney(x), /invalid_amount/); assert.throws(() => assertMoney(1, "USD"), /invalid_currency/); });
 test("server ID, reference, and idempotency are stable and identities remain distinct", async () => { const s = setup(); const result = await run(s); assert.equal(s.saved.orderId, "internal123"); assert.ok(s.saved.orderId.length <= 40); assert.equal(s.saved.idempotencyKey, "fawcett-internal123"); assert.equal(s.calls[1][1].order.idempotencyKey, s.saved.idempotencyKey); assert.equal(result.providerOrderId, "square-order"); assert.notEqual(result.orderId, result.providerOrderId); });
 test("provider response validation is strict", () => {
-  const order = { amountCents: 1000 }; const valid = { paymentLink: { id: "link", url: "https://checkout.square.site/test" }, order: { id: "sq", totalMoney: { amount: 1000, currency: "CAD" } } };
-  assert.doesNotThrow(() => validatePaymentLinkResponse(valid, order));
+  const order = { amountCents: 1000 }; const valid = { paymentLink: { id: "link", url: "https://sandbox.square.link/test" }, order: { id: "sq", totalMoney: { amount: 1000, currency: "CAD" } } };
+  assert.doesNotThrow(() => validatePaymentLinkResponse(valid, order, "sandbox"));
   for (const [change, message] of [
     [(x) => { x.paymentLink.id = ""; }, "invalid_payment_link_id"], [(x) => { delete x.order.id; }, "missing_provider_order_id"],
-    [(x) => { x.paymentLink.url = "http://square.link/test"; }, "invalid_checkout_url"], [(x) => { x.paymentLink.url = "https://evil.test"; }, "invalid_checkout_host"],
+    [(x) => { x.paymentLink.url = "http://sandbox.square.link/test"; }, "invalid_checkout_url"], [(x) => { x.paymentLink.url = "https://evil.test"; }, "invalid_checkout_host"],
     [(x) => { x.order.totalMoney.amount = 999; }, "provider_amount_mismatch"], [(x) => { x.order.totalMoney.currency = "USD"; }, "invalid_currency"],
-  ]) { const value = structuredClone(valid); change(value); assert.throws(() => validatePaymentLinkResponse(value, order), new RegExp(message)); }
+  ]) { const value = structuredClone(valid); change(value); assert.throws(() => validatePaymentLinkResponse(value, order, "sandbox"), new RegExp(message)); }
+});
+test("provider checkout hosts must exactly match the configured Square environment", () => {
+  const order = { amountCents: 1000 };
+  const response = (url) => ({ paymentLink: { id: "link", url }, order: { id: "sq" } });
+  assert.doesNotThrow(() => validatePaymentLinkResponse(response("https://sandbox.square.link/u/safe"), order, "sandbox"));
+  for (const url of ["https://square.link/u/safe", "https://checkout.square.site/u/safe"]) {
+    assert.doesNotThrow(() => validatePaymentLinkResponse(response(url), order, "production"));
+    assert.throws(() => validatePaymentLinkResponse(response(url), order, "sandbox"), /invalid_checkout_host/);
+  }
+  assert.throws(() => validatePaymentLinkResponse(response("https://sandbox.square.link/u/safe"), order, "production"), /invalid_checkout_host/);
+  assert.throws(() => validatePaymentLinkResponse({ paymentLink: { id: "link", long_url: "https://sandbox.square.link/u/safe" }, order: { id: "sq" } }, order, "sandbox"), /invalid_checkout_url/);
 });
 test("provider timeouts during create and reconciliation remain recoverable", async () => {
   const s = setup();
@@ -67,10 +78,10 @@ test("provider timeouts during create and reconciliation remain recoverable", as
   assert.equal(s.saved.status, "creating");
   assert.equal(s.saved.failureCode, null);
 
-  const response = { paymentLink: { id: "link-id", url: "https://square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } };
+  const response = { paymentLink: { id: "link-id", url: "https://sandbox.square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } };
   s.provider.createPaymentLink = async (values) => { s.calls.push(["provider", values]); return response; };
   const recovered = await reconcileFounderCheckout({ orderId: "internal123", config: s.config, storage: s.storage, provider: s.provider, now: () => "recovered" });
-  assert.equal(recovered.checkoutUrl, "https://square.link/u/test");
+  assert.equal(recovered.checkoutUrl, "https://sandbox.square.link/u/test");
   assert.equal(s.calls.filter(([name]) => name === "attach").length, 1);
   const providerCalls = s.calls.filter(([name]) => name === "provider");
   assert.equal(providerCalls.length, 3);
@@ -111,7 +122,7 @@ test("successful provider call followed by persistence failure remains recoverab
   const recovered = await reconcileFounderCheckout({ orderId: error.orderId, config: s.config, storage: s.storage, provider: s.provider, now: () => "retry-now" });
   assert.equal(recovered.orderId, "internal123");
   assert.equal(recovered.idempotencyKey, "fawcett-internal123");
-  assert.equal(recovered.checkoutUrl, "https://square.link/u/test");
+  assert.equal(recovered.checkoutUrl, "https://sandbox.square.link/u/test");
   const providerCalls = s.calls.filter(([name]) => name === "provider");
   assert.equal(providerCalls.length, 2);
   assert.equal(providerCalls[1][1].order.orderId, providerCalls[0][1].order.orderId);

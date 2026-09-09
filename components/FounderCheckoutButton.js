@@ -8,7 +8,7 @@ function requestId() {
   return crypto.randomUUID().replaceAll("-", "");
 }
 
-export default function FounderCheckoutButton({ offerId, enabled }) {
+export default function FounderCheckoutButton({ offerId, enabled, environment }) {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
   const retryId = useRef(null);
@@ -32,7 +32,7 @@ export default function FounderCheckoutButton({ offerId, enabled }) {
         body: JSON.stringify(buildFounderCheckoutBody(offerId, retryId.current ||= requestId())),
       });
       const result = await response.json();
-      const checkoutResult = validateFounderCheckoutResult(response, result);
+      const checkoutResult = validateFounderCheckoutResult(response, result, environment);
       window.location.assign(checkoutResult.checkoutUrl);
     } catch {
       setError("Checkout could not be started. Please try again.");

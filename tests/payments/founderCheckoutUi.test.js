@@ -15,14 +15,20 @@ test("all fixed Founder offers produce an exact two-field payload", () => {
 });
 
 test("successful checkout results accept only exact safe Square hosts", () => {
-  for (const checkoutUrl of ["https://square.link/u/safe", "https://checkout.square.site/pay/safe"]) {
-    assert.equal(validateFounderCheckoutResult(response(), { orderId: "internal", checkoutUrl }).checkoutUrl, checkoutUrl);
+  for (const [environment, checkoutUrl] of [["sandbox", "https://sandbox.square.link/u/safe"], ["production", "https://square.link/u/safe"], ["production", "https://checkout.square.site/pay/safe"]]) {
+    assert.equal(validateFounderCheckoutResult(response(), { orderId: "internal", checkoutUrl }, environment).checkoutUrl, checkoutUrl);
   }
   for (const checkoutUrl of [
-    "http://square.link/u/x", "https://user:pass@square.link/u/x", "https://square.link:443/u/x",
-    "https://square.link:8443/u/x", "https://evil.square.link/u/x", "https://square.link.evil.test/u/x",
-    "https://checkout.square.site.evil.test/u/x", "not a url", "", " https://square.link/u/x",
-  ]) assert.throws(() => validateFounderCheckoutResult(response(), { orderId: "internal", checkoutUrl }), /checkout_failed/);
+    "http://sandbox.square.link/u/x", "https://user:pass@sandbox.square.link/u/x", "https://sandbox.square.link:443/u/x",
+    "https://sandbox.square.link:8443/u/x", "https://evil.sandbox.square.link/u/x", "https://sandbox.square.link.evil.test/u/x",
+    "https://connect.squareupsandbox.com/u/x", "not a url", "", " https://sandbox.square.link/u/x",
+  ]) assert.throws(() => validateFounderCheckoutResult(response(), { orderId: "internal", checkoutUrl }, "sandbox"), /checkout_failed/);
+  for (const checkoutUrl of ["https://square.link/u/x", "https://checkout.square.site/u/x"]) {
+    assert.throws(() => validateFounderCheckoutResult(response(), { orderId: "internal", checkoutUrl }, "sandbox"), /checkout_failed/);
+  }
+  for (const checkoutUrl of ["https://sandbox.square.link/u/x", "https://evil.square.link/u/x", "https://square.link.evil.test/u/x", "https://checkout.square.site.evil.test/u/x"]) {
+    assert.throws(() => validateFounderCheckoutResult(response(), { orderId: "internal", checkoutUrl }, "production"), /checkout_failed/);
+  }
 });
 
 test("missing, unexpected, and API-error results are rejected", () => {
@@ -30,7 +36,7 @@ test("missing, unexpected, and API-error results are rejected", () => {
     [response(false), { orderId: "internal", checkoutUrl: "https://square.link/u/x" }],
     [response(), { error: "service_unavailable" }], [response(), null],
     [response(), { orderId: "internal", checkoutUrl: "https://square.link/u/x", provider: "square" }],
-  ]) assert.throws(() => validateFounderCheckoutResult(res, result), /checkout_failed/);
+  ]) assert.throws(() => validateFounderCheckoutResult(res, result, "production"), /checkout_failed/);
 });
 
 test("Founder button uses validated helpers and remains launch-disabled", () => {
