@@ -61,3 +61,21 @@ test("checkout idempotency and rate-limit state is server-only for every browser
     }
   }
 });
+
+test("Founder records are server-write-only and profiles are owner/admin readable", async () => {
+  await seed("adminUsers", "admin", { active: true });
+  await seed("founderProfiles", "profile", { clientUid: "client", environment: "sandbox" });
+  await seed("founderContributions", "contribution", { clientUid: "client" });
+  await seed("founderCounters", "sandbox", { nextNumber: 2 });
+  await assertSucceeds(getDoc(doc(env.authenticatedContext("client").firestore(), "founderProfiles", "profile")));
+  await assertSucceeds(getDoc(doc(env.authenticatedContext("admin").firestore(), "founderProfiles", "profile")));
+  await assertFails(getDoc(doc(env.authenticatedContext("other").firestore(), "founderProfiles", "profile")));
+  await assertSucceeds(getDoc(doc(env.authenticatedContext("admin").firestore(), "founderContributions", "contribution")));
+  for (const collection of ["founderProfiles", "founderContributions", "founderCounters"]) {
+    for (const uid of ["client", "admin"]) {
+      const ref = doc(env.authenticatedContext(uid).firestore(), collection, "new-record");
+      await assertFails(setDoc(ref, { clientUid: uid }));
+    }
+  }
+  await assertFails(getDoc(doc(env.authenticatedContext("admin").firestore(), "founderCounters", "sandbox")));
+});
