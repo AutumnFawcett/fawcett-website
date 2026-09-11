@@ -9,14 +9,14 @@ import { assertSquareCheckoutConfig } from "../../lib/payments/squareCheckoutCon
 
 function setup(response = { paymentLink: { id: "link-id", url: "https://sandbox.square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } }) {
   const calls = []; let saved;
-  return { calls, get saved() { return saved; }, config: { paymentsEnabled: true, environment: "sandbox", locationId: "loc" }, provider: { async createPaymentLink(value) { calls.push(["provider", value]); return response; } }, storage: {
+  return { calls, get saved() { return saved; }, config: { paymentsEnabled: true, environment: "sandbox", locationId: "loc", redirectUrl: "https://www.fawcetttattoos.com/founders/return", acknowledgementVersion: "founder-terms-2026-09-11" }, provider: { async createPaymentLink(value) { calls.push(["provider", value]); return response; } }, storage: {
     async getOrder() { return saved; },
     async createOrder(value) { calls.push(["create", value]); saved = value; },
     async attachProviderIdentity(id, identity) { calls.push(["attach", id, identity]); Object.assign(saved, identity, { status: "pending" }); },
     async markCreationFailed(id, code) { calls.push(["failed", id, code]); saved.status = "creation_failed"; saved.failureCode = code; },
   } };
 }
-const run = (s, input = { offerId: "founder-10-v1" }) => createFounderCheckout({ input, clientUid: "uid", ...s, createId: () => "internal123", now: () => "now" });
+const run = (s, input = { offerId: "founder-10-v1", acknowledgement: { accepted: true } }) => createFounderCheckout({ input, clientUid: "uid", ...s, createId: () => "internal123", now: () => new Date(1000) });
 
 test("disabled flag fails closed before storage and provider", async () => { const s = setup(); s.config.paymentsEnabled = false; await assert.rejects(run(s), /payments_disabled/); assert.equal(s.calls.length, 0); });
 test("checkout configuration fails closed before storage and provider", async () => {
@@ -31,10 +31,10 @@ test("checkout configuration fails closed before storage and provider", async ()
     assert.equal(s.calls.length, 0);
   }
 });
-test("unknown offers and browser-controlled commercial fields are rejected", async () => { const s = setup(); await assert.rejects(run(s, { offerId: "custom" }), /unknown_offer/); await assert.rejects(run(s, { offerId: "founder-10-v1", amountCents: 1 }), /untrusted_checkout_field/); assert.equal(s.calls.length, 0); });
+test("unknown offers and browser-controlled commercial fields are rejected", async () => { const s = setup(); await assert.rejects(run(s, { offerId: "custom", acknowledgement: { accepted: true } }), /unknown_offer/); await assert.rejects(run(s, { offerId: "founder-10-v1", amountCents: 1, acknowledgement: { accepted: true } }), /untrusted_checkout_field/); assert.equal(s.calls.length, 0); });
 test("catalogue has fixed CAD safe-integer amounts", () => { assert.deepEqual(Object.values(FOUNDER_OFFERS).map((x) => x.amountCents), [1000, 2500, 5000, 10000, 25000]); for (const x of Object.values(FOUNDER_OFFERS)) assert.doesNotThrow(() => assertMoney(x.amountCents, x.currency)); });
 test("Money validation never coerces malformed values", () => { for (const x of ["1", -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => assertMoney(x), /invalid_amount/); assert.throws(() => assertMoney(1, "USD"), /invalid_currency/); });
-test("server ID, reference, and idempotency are stable and identities remain distinct", async () => { const s = setup(); const result = await run(s); assert.equal(s.saved.orderId, "internal123"); assert.ok(s.saved.orderId.length <= 40); assert.equal(s.saved.idempotencyKey, "fawcett-internal123"); assert.equal(s.calls[1][1].order.idempotencyKey, s.saved.idempotencyKey); assert.equal(result.providerOrderId, "square-order"); assert.notEqual(result.orderId, result.providerOrderId); });
+test("server ID, reference, and idempotency are stable and identities remain distinct", async () => { const s = setup(); const result = await run(s); assert.equal(s.saved.orderId, "internal123"); assert.ok(s.saved.orderId.length <= 40); assert.equal(s.saved.idempotencyKey, "fawcett-internal123"); assert.equal(s.saved.acknowledgementVersion, "founder-terms-2026-09-11"); assert.ok(s.saved.acknowledgedAt instanceof Date); assert.equal(s.saved.acknowledgedAt, s.saved.createdAt); assert.equal(s.calls[1][1].order.idempotencyKey, s.saved.idempotencyKey); assert.equal(result.providerOrderId, "square-order"); assert.notEqual(result.orderId, result.providerOrderId); });
 test("provider response validation is strict", () => {
   const order = { amountCents: 1000 }; const valid = { paymentLink: { id: "link", url: "https://sandbox.square.link/test" }, order: { id: "sq", totalMoney: { amount: 1000, currency: "CAD" } } };
   assert.doesNotThrow(() => validatePaymentLinkResponse(valid, order, "sandbox"));
@@ -73,14 +73,14 @@ test("provider timeouts during create and reconciliation remain recoverable", as
   assert.equal(s.calls.some(([name]) => name === "failed"), false);
 
   let retryError;
-  try { await reconcileFounderCheckout({ orderId: "internal123", config: s.config, storage: s.storage, provider: s.provider, now: () => "retry" }); } catch (error) { retryError = error; }
+  try { await reconcileFounderCheckout({ orderId: "internal123", config: s.config, storage: s.storage, provider: s.provider, now: () => new Date(2000) }); } catch (error) { retryError = error; }
   assert.equal(retryError.message, "checkout_outcome_unknown");
   assert.equal(s.saved.status, "creating");
   assert.equal(s.saved.failureCode, null);
 
   const response = { paymentLink: { id: "link-id", url: "https://sandbox.square.link/u/test" }, order: { id: "square-order", totalMoney: { amount: 1000n, currency: "CAD" } } };
   s.provider.createPaymentLink = async (values) => { s.calls.push(["provider", values]); return response; };
-  const recovered = await reconcileFounderCheckout({ orderId: "internal123", config: s.config, storage: s.storage, provider: s.provider, now: () => "recovered" });
+  const recovered = await reconcileFounderCheckout({ orderId: "internal123", config: s.config, storage: s.storage, provider: s.provider, now: () => new Date(3000) });
   assert.equal(recovered.checkoutUrl, "https://sandbox.square.link/u/test");
   assert.equal(s.calls.filter(([name]) => name === "attach").length, 1);
   const providerCalls = s.calls.filter(([name]) => name === "provider");
@@ -119,7 +119,7 @@ test("successful provider call followed by persistence failure remains recoverab
     s.calls.push(["attach-retry", orderId, identity]);
     Object.assign(s.saved, identity, { status: "pending" });
   };
-  const recovered = await reconcileFounderCheckout({ orderId: error.orderId, config: s.config, storage: s.storage, provider: s.provider, now: () => "retry-now" });
+  const recovered = await reconcileFounderCheckout({ orderId: error.orderId, config: s.config, storage: s.storage, provider: s.provider, now: () => new Date(2000) });
   assert.equal(recovered.orderId, "internal123");
   assert.equal(recovered.idempotencyKey, "fawcett-internal123");
   assert.equal(recovered.checkoutUrl, "https://sandbox.square.link/u/test");
@@ -152,12 +152,12 @@ test("only a pristine creating order can attach a provider identity", () => {
 test("Square request derives every commercial value from the trusted order and offer", () => {
   const request = squarePaymentLinkRequest({
     order: { orderId: "internal", idempotencyKey: "stable-key", amountCents: 2500 },
-    offer: { itemName: "Digital Founder" }, locationId: "configured-location",
+    offer: { itemName: "Digital Founder" }, locationId: "configured-location", redirectUrl: "https://www.fawcetttattoos.com/founders/return",
   });
-  assert.deepEqual(request, { idempotencyKey: "stable-key", order: { locationId: "configured-location", referenceId: "internal", lineItems: [{ name: "Digital Founder", quantity: "1", basePriceMoney: { amount: 2500n, currency: "CAD" } }] } });
+  assert.deepEqual(request, { idempotencyKey: "stable-key", checkoutOptions: { redirectUrl: "https://www.fawcetttattoos.com/founders/return" }, order: { locationId: "configured-location", referenceId: "internal", lineItems: [{ name: "Digital Founder", quantity: "1", basePriceMoney: { amount: 2500n, currency: "CAD" } }] } });
 });
 test("adapter configuration accepts only explicit environments and a nonblank location", () => {
-  for (const environment of ["sandbox", "production"]) assert.doesNotThrow(() => assertSquareCheckoutConfig({ environment, locationId: "loc" }));
+  for (const environment of ["sandbox", "production"]) assert.doesNotThrow(() => assertSquareCheckoutConfig({ environment, locationId: "loc", redirectUrl: "https://www.fawcetttattoos.com/founders/return", acknowledgementVersion: "v" }));
   for (const config of [{ locationId: "loc" }, { environment: "test", locationId: "loc" }, { environment: "sandbox", locationId: "" }]) {
     assert.throws(() => assertSquareCheckoutConfig(config));
   }

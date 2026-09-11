@@ -10,7 +10,7 @@ test("all fixed Founder offers produce an exact two-field payload", () => {
   const ids = foundersCampaign.rewardTiers.map(({ offerId }) => offerId);
   assert.deepEqual(ids, ["founder-10-v1", "digital-founder-25-v1", "studio-supporter-50-v1", "art-founder-100-v1", "opening-founder-250-v1"]);
   for (const offerId of ids) {
-    assert.deepEqual(buildFounderCheckoutBody(offerId, "retry_token_123456"), { offerId, requestId: "retry_token_123456" });
+    assert.deepEqual(buildFounderCheckoutBody(offerId, "retry_token_123456", true), { offerId, requestId: "retry_token_123456", acknowledgement: { accepted: true } });
   }
 });
 
@@ -43,6 +43,6 @@ test("Founder button uses validated helpers and remains launch-disabled", () => 
   const source = fs.readFileSync("components/FounderCheckoutButton.js", "utf8");
   assert.match(source, /buildFounderCheckoutBody/);
   assert.match(source, /validateFounderCheckoutResult/);
-  assert.match(source, /if \(!enabled\).*Available at launch/);
+  assert.match(source, /if \(!enabled\).*Payments unavailable/);
   assert.match(source, /tattoo-portal\?returnTo=%2Ffounders/);
 });
