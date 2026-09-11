@@ -1,0 +1,16 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { campaignStats, recognitionPair, safeFounderProfile } from "../../lib/payments/founderViews.js";
+
+const base = { clientUid: "client-a", environment: "sandbox", currency: "CAD", founderNumber: 1,
+  recognitionMode: "anonymous", publicRecognitionEnabled: false, confirmedContributionCents: 1000,
+  eligibleContributionCents: 1000, refundedContributionCents: 0, disputedContributionCents: 0,
+  earnedTierId: "founder-10-v1", earnedTierName: "Founder", status: "active" };
+
+test("safe profile omits identity and calculates next tier", () => { const result = safeFounderProfile(base, { environment: "sandbox", uid: "client-a" }); assert.equal(result.founderNumber, 1); assert.equal(result.nextTier.remainingCents, 1500); assert.equal("clientUid" in result, false); });
+test("top tier has a completed next-tier state", () => { const result = safeFounderProfile({ ...base, confirmedContributionCents: 25000, eligibleContributionCents: 25000, earnedTierId: "opening-founder-250-v1", earnedTierName: "Opening Founder" }, { environment: "sandbox", uid: "client-a" }); assert.equal(result.nextTier, null); });
+test("refund and disputed hold fields remain visible", () => { const result = safeFounderProfile({ ...base, confirmedContributionCents: 3000, refundedContributionCents: 1000, disputedContributionCents: 1000, status: "disputed_hold" }, { environment: "sandbox" }); assert.equal(result.status, "disputed_hold"); assert.equal(result.refundedContributionCents, 1000); });
+test("recognition accepts exactly the invariant pairs", () => { assert.equal(recognitionPair({ recognitionMode: "public", publicRecognitionEnabled: true }).recognitionMode, "public"); assert.equal(recognitionPair({ recognitionMode: "anonymous", publicRecognitionEnabled: false }).recognitionMode, "anonymous"); assert.throws(() => recognitionPair({ recognitionMode: "public", publicRecognitionEnabled: false })); assert.throws(() => recognitionPair({ recognitionMode: "anonymous", publicRecognitionEnabled: false, founderNumber: 9 })); });
+test("profiles fail closed for wrong owner, environment, malformed totals, and tier inconsistency", () => { assert.throws(() => safeFounderProfile(base, { environment: "sandbox", uid: "client-b" })); assert.throws(() => safeFounderProfile(base, { environment: "production" })); assert.throws(() => safeFounderProfile({ ...base, eligibleContributionCents: -1 }, { environment: "sandbox" })); assert.throws(() => safeFounderProfile({ ...base, earnedTierId: null, earnedTierName: null }, { environment: "sandbox" })); });
+test("public campaign stats contain aggregates only and isolate environments", () => { const result = campaignStats([base], "sandbox"); assert.deepEqual(Object.keys(result), ["goalAmountCents", "eligibleAmountCents", "supporterCount", "percentage"]); assert.equal(result.eligibleAmountCents, 1000); assert.equal(JSON.stringify(result).includes("client-a"), false); assert.throws(() => campaignStats([base], "production")); });
+test("campaign progress clamps at the goal", () => { const rich = { ...base, confirmedContributionCents: 6000000, eligibleContributionCents: 6000000, earnedTierId: "opening-founder-250-v1", earnedTierName: "Opening Founder" }; assert.equal(campaignStats([rich], "sandbox").percentage, 100); });
