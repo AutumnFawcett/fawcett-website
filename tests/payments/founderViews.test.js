@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { campaignStats, recognitionPair, safeFounderProfile } from "../../lib/payments/founderViews.js";
+import { campaignStats, formatCampaignPercentage, recognitionPair, safeFounderProfile } from "../../lib/payments/founderViews.js";
 
 const base = { clientUid: "client-a", environment: "sandbox", currency: "CAD", founderNumber: 1,
   recognitionMode: "anonymous", publicRecognitionEnabled: false, confirmedContributionCents: 1000,
@@ -14,3 +14,11 @@ test("recognition accepts exactly the invariant pairs", () => { assert.equal(rec
 test("profiles fail closed for wrong owner, environment, malformed totals, and tier inconsistency", () => { assert.throws(() => safeFounderProfile(base, { environment: "sandbox", uid: "client-b" })); assert.throws(() => safeFounderProfile(base, { environment: "production" })); assert.throws(() => safeFounderProfile({ ...base, eligibleContributionCents: -1 }, { environment: "sandbox" })); assert.throws(() => safeFounderProfile({ ...base, earnedTierId: null, earnedTierName: null }, { environment: "sandbox" })); });
 test("public campaign stats contain aggregates only and isolate environments", () => { const result = campaignStats([base], "sandbox"); assert.deepEqual(Object.keys(result), ["goalAmountCents", "eligibleAmountCents", "supporterCount", "percentage"]); assert.equal(result.eligibleAmountCents, 1000); assert.equal(JSON.stringify(result).includes("client-a"), false); assert.throws(() => campaignStats([base], "production")); });
 test("campaign progress clamps at the goal", () => { const rich = { ...base, confirmedContributionCents: 6000000, eligibleContributionCents: 6000000, earnedTierId: "opening-founder-250-v1", earnedTierName: "Opening Founder" }; assert.equal(campaignStats([rich], "sandbox").percentage, 100); });
+test("campaign percentage preserves useful early progress and clamps safely", () => {
+  assert.equal(formatCampaignPercentage(0, 5000000), "0%");
+  assert.equal(formatCampaignPercentage(1000, 5000000), "0.02%");
+  assert.equal(formatCampaignPercentage(1250000, 5000000), "25%");
+  assert.equal(formatCampaignPercentage(1665000, 5000000), "33.3%");
+  assert.equal(formatCampaignPercentage(5000000, 5000000), "100%");
+  assert.equal(formatCampaignPercentage(6000000, 5000000), "100%");
+});
