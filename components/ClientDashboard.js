@@ -15,6 +15,7 @@ import {
 import { auth, db } from "@/lib/firebaseClient";
 
 const portalCards = [
+  { title: "Founder Profile", label: "Founder", description: "View your permanent Founder number, earned tier, contribution progress, and recognition preference.", href: "/portal/founder", founder: true },
   {
     title: "Messages",
     label: "Inbox",
@@ -327,7 +328,7 @@ export default function ClientDashboard() {
                   {card.title}
                 </h3>
 
-                <span className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white shadow-[0_0_24px_rgba(0,0,204,0.25)]">
+                <span className={"rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white shadow-[0_0_24px_rgba(0,0,204,0.25)]" + (card.founder ? " mt-3" : "")}>
                   {card.label}
                 </span>
               </div>

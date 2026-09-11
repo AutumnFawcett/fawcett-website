@@ -8,6 +8,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const dashboardCards = [
+  { title: "Founders", description: "Review secure Founder entitlements, campaign totals, tiers, holds, and recognition preferences.", href: "/admin/founders", label: "Campaign", founder: true },
   {
     title: "Intake",
     description:
@@ -321,7 +322,7 @@ export default function AdminDashboard() {
                   {card.title}
                 </h3>
 
-                <span className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white shadow-[0_0_24px_rgba(0,0,204,0.25)]">
+                <span className={"rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white shadow-[0_0_24px_rgba(0,0,204,0.25)]" + (card.founder ? " mt-3" : "")}>
                   {card.label}
                 </span>
               </div>
