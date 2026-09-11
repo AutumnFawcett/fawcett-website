@@ -2,6 +2,8 @@ import ProgressMeter from "@/components/ProgressMeter";
 import RewardTierCard from "@/components/RewardTierCard";
 import { foundersCampaign, formatCampaignCurrency } from "@/lib/foundersCampaign";
 import Link from "next/link";
+import { getFirebaseAdmin } from "@/lib/server/firebaseAdmin";
+import { configuredFounderEnvironment, readCampaignStats } from "@/lib/server/founderViewsService";
 
 export const metadata = {
   title: "Fawcett Founders — Private Preview",
@@ -9,8 +11,11 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function FoundersPage() {
+export const dynamic = "force-dynamic";
+export default async function FoundersPage() {
   const campaign = foundersCampaign;
+  let stats = { eligibleAmountCents: 0, supporterCount: 0 };
+  try { stats = await readCampaignStats(getFirebaseAdmin().firestore, configuredFounderEnvironment()); } catch { /* safe unavailable fallback */ }
   const checkoutEnabled = process.env.SQUARE_PAYMENTS_ENABLED === "true";
   const checkoutEnvironment = process.env.SQUARE_ENVIRONMENT;
 
@@ -49,9 +54,9 @@ export default function FoundersPage() {
 
       <div className="founders-shell">
         <ProgressMeter
-          amountRaisedCents={campaign.amountRaisedCents}
+          amountRaisedCents={stats.eligibleAmountCents}
           goalCents={campaign.goalCents}
-          supporterCount={campaign.supporterCount}
+          supporterCount={stats.supporterCount}
         />
 
         <section className="founders-story founders-section" aria-labelledby="founders-story-title">

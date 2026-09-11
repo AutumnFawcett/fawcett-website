@@ -15,6 +15,7 @@ import {
 import { auth, db } from "@/lib/firebaseClient";
 
 const portalCards = [
+  { title: "Founder Profile", label: "Founder", description: "View your permanent Founder number, earned tier, contribution progress, and recognition preference.", href: "/portal/founder" },
   {
     title: "Messages",
     label: "Inbox",

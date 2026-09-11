@@ -8,6 +8,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const dashboardCards = [
+  { title: "Founders", description: "Review secure Founder entitlements, campaign totals, tiers, holds, and recognition preferences.", href: "/admin/founders", label: "Campaign" },
   {
     title: "Intake",
     description:
