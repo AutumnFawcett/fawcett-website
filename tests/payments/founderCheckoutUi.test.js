@@ -61,6 +61,10 @@ test("portal keeps entitlement status separate from server-provided earned benef
   const source = fs.readFileSync("components/FounderProfile.js", "utf8");
   assert.match(source, /Your Founder benefits/);
   assert.match(source, /p\.earnedBenefits\.map/);
+  assert.match(source, /<h3>Founder details<\/h3>/);
+  assert.match(source, /String\(p\.founderNumber\)\.padStart/);
+  assert.match(source, /p\.recognitionMode === "public" \? "Future public recognition" : "Anonymous"/);
+  assert.doesNotMatch(source, /Permanent status:<\/strong>/);
   assert.match(source, /account entitlement, separately from your earned reward tier/);
   assert.doesNotMatch(source, /founder-badge">\{p\.earnedTierName/);
 });
