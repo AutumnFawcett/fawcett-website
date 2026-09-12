@@ -13,9 +13,9 @@ function setup() {
     async attachProviderIdentity(id, identity) { Object.assign(reservation.order, identity, { status: "pending" }); }, async markCreationFailed() {},
   };
   const provider = { async createPaymentLink() { providers++; return { paymentLink: { id: "link", url: "https://sandbox.square.link/u/idempotent" }, order: { id: "sq-order", totalMoney: { amount: 1000n, currency: "CAD" } } }; } };
-  return { storage, provider, config: { paymentsEnabled: true, environment: "sandbox", locationId: "loc" }, get providers() { return providers; }, get reservation() { return reservation; } };
+  return { storage, provider, config: { paymentsEnabled: true, environment: "sandbox", locationId: "loc", redirectUrl: "https://www.fawcetttattoos.com/founders/return", acknowledgementVersion: "founder-terms-2026-09-11" }, get providers() { return providers; }, get reservation() { return reservation; } };
 }
-const run = (s, values = {}) => createIdempotentFounderCheckout({ input: { offerId: values.offerId || "founder-10-v1" }, requestId: "retry_token_123456", clientUid: values.uid || "uid", ...s, createId: values.createId || (() => "order-one"), now: () => new Date(0) });
+const run = (s, values = {}) => createIdempotentFounderCheckout({ input: { offerId: values.offerId || "founder-10-v1", acknowledgement: { accepted: true } }, requestId: "retry_token_123456", clientUid: values.uid || "uid", ...s, createId: values.createId || (() => "order-one"), now: () => new Date(0) });
 test("sequential retry returns durable result without another provider link", async () => { const s = setup(); const a = await run(s); const b = await run(s, { createId: () => "unused" }); assert.equal(a.orderId, b.orderId); assert.equal(s.providers, 1); });
 test("retry token cannot change user or offer", async () => { const s = setup(); await run(s); await assert.rejects(run(s, { uid: "other" }), /checkout_request_conflict/); await assert.rejects(run(s, { offerId: "digital-founder-25-v1" }), /checkout_request_conflict/); });
 test("ambiguous retry retains the original order and Square idempotency key", async () => { const s = setup(); const keys = []; s.provider.createPaymentLink = async ({ order }) => { keys.push(order.idempotencyKey); throw new Error("timeout"); }; await assert.rejects(run(s), /checkout_outcome_unknown/); await assert.rejects(run(s, { createId: () => "unused" }), /checkout_outcome_unknown/); assert.deepEqual(keys, ["fawcett-order-one", "fawcett-order-one"]); });
@@ -46,7 +46,7 @@ test("pending retries reject unsafe or environment-mismatched stored URLs and in
 test("service boundary rejects malformed request IDs before durable work", async () => {
   for (const requestId of [undefined, "short", "x".repeat(65), "invalid request id!"]) {
     const s = setup();
-    await assert.rejects(createIdempotentFounderCheckout({ input: { offerId: "founder-10-v1" }, requestId, clientUid: "uid", ...s }), /invalid_request_id/);
+    await assert.rejects(createIdempotentFounderCheckout({ input: { offerId: "founder-10-v1", acknowledgement: { accepted: true } }, requestId, clientUid: "uid", ...s }), /invalid_request_id/);
     assert.equal(s.reservation, undefined); assert.equal(s.providers, 0);
   }
 });

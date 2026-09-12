@@ -10,7 +10,7 @@ test("all fixed Founder offers produce an exact two-field payload", () => {
   const ids = foundersCampaign.rewardTiers.map(({ offerId }) => offerId);
   assert.deepEqual(ids, ["founder-10-v1", "digital-founder-25-v1", "studio-supporter-50-v1", "art-founder-100-v1", "opening-founder-250-v1"]);
   for (const offerId of ids) {
-    assert.deepEqual(buildFounderCheckoutBody(offerId, "retry_token_123456"), { offerId, requestId: "retry_token_123456" });
+    assert.deepEqual(buildFounderCheckoutBody(offerId, "retry_token_123456", true), { offerId, requestId: "retry_token_123456", acknowledgement: { accepted: true } });
   }
 });
 
@@ -43,6 +43,28 @@ test("Founder button uses validated helpers and remains launch-disabled", () => 
   const source = fs.readFileSync("components/FounderCheckoutButton.js", "utf8");
   assert.match(source, /buildFounderCheckoutBody/);
   assert.match(source, /validateFounderCheckoutResult/);
-  assert.match(source, /if \(!enabled\).*Available at launch/);
+  assert.match(source, /if \(!enabled\).*Payments unavailable/);
   assert.match(source, /tattoo-portal\?returnTo=%2Ffounders/);
+});
+
+test("contribution options have a stable anchor and portal link without changing disabled payments", () => {
+  const campaign = fs.readFileSync("app/founders/page.js", "utf8");
+  const profile = fs.readFileSync("components/FounderProfile.js", "utf8");
+  assert.match(campaign, /id="contribution-options"/);
+  assert.match(profile, /href="\/founders#contribution-options"/);
+  assert.match(profile, />View contribution options</);
+  assert.doesNotMatch(profile, /Contribute \$15|custom contribution/i);
+  assert.match(campaign, /checkoutEnabled=\{checkoutEnabled\}/);
+});
+
+test("portal keeps entitlement status separate from server-provided earned benefits", () => {
+  const source = fs.readFileSync("components/FounderProfile.js", "utf8");
+  assert.match(source, /Your Founder benefits/);
+  assert.match(source, /p\.earnedBenefits\.map/);
+  assert.match(source, /<h3>Founder details<\/h3>/);
+  assert.match(source, /String\(p\.founderNumber\)\.padStart/);
+  assert.match(source, /p\.recognitionMode === "public" \? "Future public recognition" : "Anonymous"/);
+  assert.doesNotMatch(source, /Permanent status:<\/strong>/);
+  assert.match(source, /account entitlement, separately from your earned reward tier/);
+  assert.doesNotMatch(source, /founder-badge">\{p\.earnedTierName/);
 });

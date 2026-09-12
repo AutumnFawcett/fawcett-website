@@ -15,7 +15,7 @@ export default function RewardTierCard({ tier, featured = false, checkoutEnabled
           <li key={reward}>{reward}</li>
         ))}
       </ul>
-      <FounderCheckoutButton offerId={tier.offerId} enabled={checkoutEnabled} environment={checkoutEnvironment} />
+      <FounderCheckoutButton offerId={tier.offerId} tierTitle={tier.title} amountLabel={formatCampaignCurrency(tier.amountCents)} enabled={checkoutEnabled} environment={checkoutEnvironment} />
     </article>
   );
 }

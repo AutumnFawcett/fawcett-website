@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { handleFounderCheckoutRequest } from "../../lib/payments/founderCheckoutApi.js";
 
-const validBody = { offerId: "founder-10-v1", requestId: "retry_token_123456" };
+const validBody = { offerId: "founder-10-v1", requestId: "retry_token_123456", acknowledgement: { accepted: true } };
 function request(body = validBody, headers = {}) {
   return new Request("https://example.test/api/payments/checkout/founder", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer token", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
 }
@@ -69,4 +69,11 @@ test("stored inconsistency receives a stable no-store internal error", async () 
   const mapped = await handleFounderCheckoutRequest(request(), deps.value);
   assert.equal(mapped.status, 500); assert.equal(mapped.headers.get("cache-control"), "no-store");
   assert.deepEqual(await mapped.json(), { error: "internal_inconsistency" });
+});
+test("acknowledgement must be exact and client redirect data is rejected", async () => {
+  for (const acknowledgement of [undefined, false, true, {}, { accepted: false }, { accepted: true, version: "client" }, { accepted: "true" }]) {
+    const body = { offerId: validBody.offerId, requestId: validBody.requestId, ...(acknowledgement === undefined ? {} : { acknowledgement }) };
+    assert.equal((await handleFounderCheckoutRequest(request(body), dependencies().value)).status, 400);
+  }
+  assert.equal((await handleFounderCheckoutRequest(request({ ...validBody, redirectUrl: "https://evil.test" }), dependencies().value)).status, 400);
 });

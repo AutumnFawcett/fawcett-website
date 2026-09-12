@@ -4,6 +4,7 @@ import { foundersCampaign, formatCampaignCurrency } from "@/lib/foundersCampaign
 import Link from "next/link";
 import { getFirebaseAdmin } from "@/lib/server/firebaseAdmin";
 import { configuredFounderEnvironment, readCampaignStats } from "@/lib/server/founderViewsService";
+import { getFounderLaunchState } from "@/lib/server/founderLaunchConfig";
 
 export const metadata = {
   title: "Fawcett Founders — Private Preview",
@@ -16,8 +17,9 @@ export default async function FoundersPage() {
   const campaign = foundersCampaign;
   let stats = { eligibleAmountCents: 0, supporterCount: 0 };
   try { stats = await readCampaignStats(getFirebaseAdmin().firestore, configuredFounderEnvironment()); } catch { /* safe unavailable fallback */ }
-  const checkoutEnabled = process.env.SQUARE_PAYMENTS_ENABLED === "true";
-  const checkoutEnvironment = process.env.SQUARE_ENVIRONMENT;
+  const launch = getFounderLaunchState();
+  const checkoutEnabled = launch.state === "enabled";
+  const checkoutEnvironment = launch.environment;
 
   return (
     <main className="founders-page">
@@ -40,8 +42,8 @@ export default async function FoundersPage() {
           <div className="founders-launch-state">
             <span aria-hidden="true" />
             <div>
-              <strong>Support launching soon</strong>
-              <p>No payments or contribution submissions are being accepted yet.</p>
+              <strong>{checkoutEnabled ? "Founder checkout is open" : launch.state === "disabled" ? "Payments are not currently being accepted" : "Founder checkout is unavailable"}</strong>
+              <p>{checkoutEnabled ? "Checkout is securely completed through Square." : launch.state === "disabled" ? "Tier purchases will remain unavailable until payments open." : "Please check back later."}</p>
             </div>
           </div>
         </div>
@@ -95,7 +97,7 @@ export default async function FoundersPage() {
           </div>
         </section>
 
-        <section className="founders-section" aria-labelledby="rewards-title">
+        <section className="founders-section" id="contribution-options" aria-labelledby="rewards-title">
           <div className="founders-section-heading founders-rewards-heading">
             <div>
               <p className="founders-kicker">Founder rewards</p>
@@ -118,8 +120,8 @@ export default async function FoundersPage() {
             ))}
             <article className="founders-tier founders-tier-custom">
               <p className="founders-kicker">Custom support</p>
-              <h3>Coming later</h3>
-              <p>More ways to support may be introduced when the campaign launches.</p>
+              <h3>Not available</h3>
+              <p>Custom support is not currently offered.</p>
             </article>
           </div>
         </section>
@@ -131,9 +133,7 @@ export default async function FoundersPage() {
             No inflated counters. No invented momentum. Just a clear goal and an
             honest invitation—ready for the people who want to help build what&apos;s next.
           </p>
-          <div className="founders-disabled-button" aria-disabled="true">
-            Support launching soon
-          </div>
+          {!checkoutEnabled && <div className="founders-disabled-button" aria-disabled="true">Founder support unavailable</div>}
         </section>
 
         <footer className="founders-disclaimer">
