@@ -363,6 +363,8 @@ img {
   margin-top: 5px;
 }
 
+.founder-benefits{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,340px);gap:clamp(1.5rem,5vw,4rem);align-items:center}.founder-benefits h2{font-size:clamp(2rem,5vw,4rem);margin:.5rem 0 1.25rem}.founder-benefits ul,.founder-next-benefits ul{padding-left:1.25rem;line-height:1.7}.founder-benefits-copy>p:last-child{color:#d7d7d7}.founder-badge-placeholder{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px solid #7777ff;border-radius:50%;background:radial-gradient(circle at 35% 25%,#2929dc 0,#080865 28%,#050505 67%,#9c126e 100%);box-shadow:inset 0 0 0 .5rem #050505,inset 0 0 0 .65rem #ffffff3d,0 1rem 3rem #0000cc2e;padding:2rem;color:#fff}.founder-badge-placeholder span,.founder-badge-placeholder small{text-transform:uppercase;letter-spacing:.22em;font-size:.65rem}.founder-badge-placeholder strong{max-width:12ch;margin:.75rem 0;font-size:clamp(1.2rem,3vw,2rem);line-height:1;text-transform:uppercase}.founder-next-benefits{margin-top:1.5rem}.founder-next-benefits h3{margin-bottom:.5rem}@media(max-width:760px){.founder-benefits{grid-template-columns:1fr}.founder-badge-placeholder{width:min(280px,100%);justify-self:center}}
+
 .logged-in-row {
   display: flex;
   align-items: center;
