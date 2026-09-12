@@ -46,3 +46,21 @@ test("Founder button uses validated helpers and remains launch-disabled", () => 
   assert.match(source, /if \(!enabled\).*Payments unavailable/);
   assert.match(source, /tattoo-portal\?returnTo=%2Ffounders/);
 });
+
+test("contribution options have a stable anchor and portal link without changing disabled payments", () => {
+  const campaign = fs.readFileSync("app/founders/page.js", "utf8");
+  const profile = fs.readFileSync("components/FounderProfile.js", "utf8");
+  assert.match(campaign, /id="contribution-options"/);
+  assert.match(profile, /href="\/founders#contribution-options"/);
+  assert.match(profile, />View contribution options</);
+  assert.doesNotMatch(profile, /Contribute \$15|custom contribution/i);
+  assert.match(campaign, /checkoutEnabled=\{checkoutEnabled\}/);
+});
+
+test("portal keeps entitlement status separate from server-provided earned benefits", () => {
+  const source = fs.readFileSync("components/FounderProfile.js", "utf8");
+  assert.match(source, /Your Founder benefits/);
+  assert.match(source, /p\.earnedBenefits\.map/);
+  assert.match(source, /account entitlement, separately from your earned reward tier/);
+  assert.doesNotMatch(source, /founder-badge">\{p\.earnedTierName/);
+});

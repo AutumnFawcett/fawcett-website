@@ -97,7 +97,7 @@ export default async function FoundersPage() {
           </div>
         </section>
 
-        <section className="founders-section" aria-labelledby="rewards-title">
+        <section className="founders-section" id="contribution-options" aria-labelledby="rewards-title">
           <div className="founders-section-heading founders-rewards-heading">
             <div>
               <p className="founders-kicker">Founder rewards</p>
