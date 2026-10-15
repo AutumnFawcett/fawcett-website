@@ -2,6 +2,22 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Missing/malformed state is closed, including for cached SDK/REST clients.
+    function businessWritesOpen() {
+      let control = get(/databases/$(database)/documents/systemControls/writeFence).data;
+      return control.schemaVersion == 1 && control.state == "open"
+        && control.writerProtocol == 1 && control.epoch is string
+        && control.epoch.matches('^[A-Za-z0-9_-]{1,80}$');
+    }
+    match /systemControls/writeFence {
+      allow get: if true;
+      allow list, write: if false;
+    }
+    function pairedClientCreate(name, id) {
+      let view = /databases/$(database)/documents/portalRecords/$(name)/records/$(id);
+      return isAdmin() || (existsAfter(view)
+        && getAfter(view).data.clientUid == request.auth.uid);
+    }
     function signedIn() {
       return request.auth != null;
     }
@@ -15,6 +31,17 @@ service cloud.firestore {
     function createsOwnRecord() {
       return signedIn()
         && request.resource.data.clientUid == request.auth.uid;
+    }
+
+    function pairedConversationUpdate(id) {
+      let view = getAfter(/databases/$(database)/documents/portalRecords/conversations/records/$(id)).data;
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return view.clientUid == request.auth.uid
+        && (!changed.hasAny(["lastMessagePreview"]) || view.get("lastMessagePreview", null) == request.resource.data.get("lastMessagePreview", null))
+        && (!changed.hasAny(["lastMessageAt"]) || view.get("lastMessageAt", null) == request.resource.data.get("lastMessageAt", null))
+        && (!changed.hasAny(["unreadForAdmin"]) || view.get("unreadForAdmin", null) == request.resource.data.get("unreadForAdmin", null))
+        && (!changed.hasAny(["unreadForClient"]) || view.get("unreadForClient", null) == request.resource.data.get("unreadForClient", null))
+        && (!changed.hasAny(["updatedAt"]) || view.get("updatedAt", null) == request.resource.data.get("updatedAt", null));
     }
 
     function createsValidMembershipApplication() {
@@ -292,60 +319,60 @@ service cloud.firestore {
     }
 
     match /clients/{clientId} {
-      allow create: if isAdmin() || createsOwnClientProfile(clientId);
+      allow create: if businessWritesOpen() && pairedClientCreate("clients", clientId) && (isAdmin() || createsOwnClientProfile(clientId));
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /membershipApplications/{applicationId} {
-      allow create: if createsValidMembershipApplication();
+      allow create: if businessWritesOpen() && pairedClientCreate("membershipApplications", applicationId) && (createsValidMembershipApplication());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /consultRequests/{consultRequestId} {
-      allow create: if createsOwnConsult();
+      allow create: if businessWritesOpen() && pairedClientCreate("consultRequests", consultRequestId) && (createsOwnConsult());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /conversations/{conversationId} {
-      allow create: if isAdmin() || createsOwnConversation();
+      allow create: if businessWritesOpen() && pairedClientCreate("conversations", conversationId) && (isAdmin() || createsOwnConversation());
       allow read: if isAdmin();
-      allow update: if isAdmin() || clientUpdatesOwnConversation();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin() || (clientUpdatesOwnConversation() && pairedConversationUpdate(conversationId)));
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /messages/{messageId} {
-      allow create: if isAdmin() || createsOwnMessage();
+      allow create: if businessWritesOpen() && pairedClientCreate("messages", messageId) && (isAdmin() || createsOwnMessage());
       allow read: if isAdmin();
       // Preserve message text/sender/history while allowing private admin review.
-      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["adminReview", "status", "assignedInbox", "assignedArtistId", "unreadForAdmin", "updatedAt"]);
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["adminReview", "status", "assignedInbox", "assignedArtistId", "unreadForAdmin", "updatedAt"]));
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /projects/{projectId} {
-      allow create: if isAdmin();
+      allow create: if businessWritesOpen() && (isAdmin());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /appointments/{appointmentId} {
-      allow create: if isAdmin();
+      allow create: if businessWritesOpen() && (isAdmin());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /payments/{paymentId} {
-      allow create: if isAdmin();
+      allow create: if businessWritesOpen() && (isAdmin());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     // Financial records are written only by trusted server code through Admin SDK.
@@ -377,38 +404,38 @@ service cloud.firestore {
     }
 
     match /membershipOffers/{offerId} {
-      allow create: if isAdmin();
+      allow create: if businessWritesOpen() && (isAdmin());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /membershipOfferResponses/{responseId} {
-      allow create: if createsValidMembershipOfferResponse();
+      allow create: if businessWritesOpen() && pairedClientCreate("membershipOfferResponses", responseId) && (createsValidMembershipOfferResponse());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /membershipChangeRequests/{requestId} {
-      allow create: if createsValidMembershipChangeRequest();
+      allow create: if businessWritesOpen() && pairedClientCreate("membershipChangeRequests", requestId) && (createsValidMembershipChangeRequest());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /projectTimeline/{entryId} {
-      allow create: if isAdmin();
+      allow create: if businessWritesOpen() && (isAdmin());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
 
     match /creditLedger/{entryId} {
-      allow create: if isAdmin();
+      allow create: if businessWritesOpen() && (isAdmin());
       allow read: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if false;
+      allow update: if businessWritesOpen() && (isAdmin());
+      allow delete: if businessWritesOpen() && (false);
     }
     // Portal documents are explicit projections. Source IDs and Auth UIDs stay
     // unchanged; original collections above are private, including legacy data.
@@ -579,7 +606,7 @@ service cloud.firestore {
         && (!("membershipOffer" in data) || portalMapMembershipOffer(data, source, enforceTypes))
         && (!("clientProjectSummary" in data) || (collectionName == "projects"
           && data.clientProjectSummary is string
-          && data.clientProjectSummary == source.get("adminReview", {}).get("clientProjectSummary", source.get("clientProjectSummary", ""))))
+          && data.clientProjectSummary == source.get("clientProjectSummary", "")))
         && (collectionName != "membershipOffers" || data.get("offerStatus", data.get("status", "")) in ["membership_offer_sent","client_reviewing_offer","membership_approved","membership_active","membership_paused","membership_cancelled","accepted","declined"])
         && (!("membershipOffer" in data) || data.membershipOffer.offerStatus in ["membership_offer_sent","client_reviewing_offer","membership_approved","membership_active","membership_paused","membership_cancelled","accepted","declined"])
         && (collectionName != "projectTimeline" || (data.clientVisible == true && !(data.entryType in ["health_skin_note","internal_note","admin_note"])));
@@ -597,9 +624,59 @@ service cloud.firestore {
         && difference.changedKeys().size() == 0;
     }
 
+    match /portalSubmissions/{uid}/requests/{id} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow create: if businessWritesOpen() && signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(["clientUid", "kind", "writerProtocol", "sourceId", "conversationId", "messageId", "createdAt"])
+        && request.resource.data.clientUid == uid && request.resource.data.writerProtocol == 1
+        && request.resource.data.kind in ["consult", "membership"]
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.clientUid == uid
+        && getAfter(/databases/$(database)/documents/messages/$(request.resource.data.messageId)).data.conversationId == request.resource.data.conversationId
+        && (request.resource.data.kind == "consult"
+          ? getAfter(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.consultRequestId == request.resource.data.sourceId
+          : getAfter(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.applicationId == request.resource.data.sourceId);
+      allow update, delete: if false;
+    }
+    match /publicationRecords/{name}/records/{id} {
+      function validReceipt() {
+        let data = request.resource.data;
+        let source = /databases/$(database)/documents/$(name)/$(id);
+        let view = /databases/$(database)/documents/portalRecords/$(name)/records/$(id);
+        return signedIn() && data.keys().hasOnly(["schemaVersion", "state", "mode", "actorUid", "reviewedAt", "approved", "sourceHash", "projectionHash", "fenceEpoch", "revision", "runId", "withdrawnAt"])
+          && data.schemaVersion == 1 && data.state in ["approved", "review_required"]
+          && data.actorUid == request.auth.uid && data.reviewedAt == request.time
+          && data.fenceEpoch == get(/databases/$(database)/documents/systemControls/writeFence).data.epoch
+          && existsAfter(view) && data.approved == getAfter(view).data
+          && (data.mode == "client_origin"
+            && data.approved.clientUid == request.auth.uid
+            && ((!exists(source) && data.state == "approved" && name in ["clients", "consultRequests", "membershipApplications", "conversations", "messages", "membershipOfferResponses", "membershipChangeRequests"])
+              || (name == "conversations" && resource.data.approved.clientUid == request.auth.uid
+                && data.state == resource.data.state
+                && data.diff(resource.data).affectedKeys().hasOnly(["schemaVersion", "mode", "actorUid", "reviewedAt", "approved", "fenceEpoch"])
+                && data.approved.diff(resource.data.approved).affectedKeys().hasOnly(["lastMessagePreview", "lastMessageAt", "unreadForAdmin", "unreadForClient", "updatedAt"]))));
+      }
+      allow read: if isAdmin();
+      allow create, update: if businessWritesOpen() && (validReceipt() || (isAdmin()
+        && request.resource.data.schemaVersion == 1
+        && ((!exists(/databases/$(database)/documents/publicationRecords/$(name)/records/$(id))
+          && request.resource.data.keys().hasOnly(["schemaVersion", "state", "approved"]))
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(["schemaVersion", "state", "approved"]))
+        && (request.resource.data.state == "withheld" && !("approved" in request.resource.data)
+          || request.resource.data.state == "review_required"
+            && request.resource.data.approved == getAfter(/databases/$(database)/documents/portalRecords/$(name)/records/$(id)).data)));
+      allow delete: if false;
+    }
     match /portalRecords/{sourceCollection}/records/{recordId} {
       function sourcePath() {
         return /databases/$(database)/documents/$(sourceCollection)/$(recordId);
+      }
+      function reviewedProjection() {
+        let receipt = getAfter(/databases/$(database)/documents/publicationRecords/$(sourceCollection)/records/$(recordId)).data;
+        return receipt.schemaVersion == 1 && receipt.state in ["approved", "review_required"]
+          && receipt.approved == request.resource.data && receipt.reviewedAt == request.time
+          && receipt.fenceEpoch == get(/databases/$(database)/documents/systemControls/writeFence).data.epoch;
       }
       function validProjection() {
         let path = sourcePath();
@@ -617,11 +694,17 @@ service cloud.firestore {
           && !exists(sourcePath()) && validProjection();
       }
       function updatesClientConversation() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
         return signedIn() && sourceCollection == "conversations"
           && resource.data.clientUid == request.auth.uid
           && request.resource.data.clientUid == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastMessagePreview", "lastMessageAt", "unreadForAdmin", "unreadForClient", "updatedAt"])
-          && validProjection();
+          && getAfter(sourcePath()).data.clientUid == request.auth.uid
+          && (!changed.hasAny(["lastMessagePreview"]) || request.resource.data.get("lastMessagePreview", null) == getAfter(sourcePath()).data.get("lastMessagePreview", null))
+          && (!changed.hasAny(["lastMessageAt"]) || request.resource.data.get("lastMessageAt", null) == getAfter(sourcePath()).data.get("lastMessageAt", null))
+          && (!changed.hasAny(["unreadForAdmin"]) || request.resource.data.get("unreadForAdmin", null) == getAfter(sourcePath()).data.get("unreadForAdmin", null))
+          && (!changed.hasAny(["unreadForClient"]) || request.resource.data.get("unreadForClient", null) == getAfter(sourcePath()).data.get("unreadForClient", null))
+          && (!changed.hasAny(["updatedAt"]) || request.resource.data.get("updatedAt", null) == getAfter(sourcePath()).data.get("updatedAt", null));
       }
       allow get: if signedIn() && sourceCollection == "clients" && recordId == request.auth.uid
         && !exists(/databases/$(database)/documents/portalRecords/$(sourceCollection)/records/$(recordId));
@@ -629,10 +712,10 @@ service cloud.firestore {
         && sourceCollection in ["clients","consultRequests","membershipApplications","conversations","messages","projects","appointments","payments","creditLedger","membershipOffers","membershipOfferResponses","membershipChangeRequests","projectTimeline"]
         && resource.data.clientUid == request.auth.uid
         && (sourceCollection != "projectTimeline" || resource.data.clientVisible == true));
-      allow create: if (isAdmin() && validProjection()) || createsClientProjection();
-      allow update: if (isAdmin() && validProjection()) || updatesClientConversation();
+      allow create: if businessWritesOpen() && reviewedProjection() && createsClientProjection();
+      allow update: if businessWritesOpen() && reviewedProjection() && updatesClientConversation();
       // Only derived views may be withdrawn; original history cannot be deleted.
-      allow delete: if isAdmin();
+      allow delete: if businessWritesOpen() && (isAdmin());
     }
   }
 }

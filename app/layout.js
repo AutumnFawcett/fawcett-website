@@ -1,4 +1,5 @@
 import "./globals.css";
+import MaintenanceBanner from "@/components/MaintenanceBanner";
 import EmailVerificationBanner from "@/components/EmailVerificationBanner";
 
 export const metadata = {
@@ -47,7 +48,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en-CA">
-      <body><EmailVerificationBanner />{children}</body>
+      <body><MaintenanceBanner /><EmailVerificationBanner />{children}</body>
     </html>
   );
 }

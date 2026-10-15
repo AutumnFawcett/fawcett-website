@@ -98,24 +98,27 @@ before(async () => {
   });
 });
 
-beforeEach(async () => testEnv.clearFirestore());
+beforeEach(async () => {
+  await testEnv.clearFirestore();
+  await testEnv.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "systemControls/writeFence"), { schemaVersion: 1, state: "open", epoch: "test", writerProtocol: 1 }));
+});
 after(async () => testEnv.cleanup());
 
 test("authenticated client creates a complete application for their own UID", async () => {
-  await assertSucceeds(setDoc(applicationRef("client-one"), validApplication()));
+  await assertSucceeds(createPaired(applicationRef("client-one"), validApplication()));
 });
 
 test("all legitimate optional contact and detail fields may be populated or empty", async () => {
   const populated = validApplication();
   populated.coverUp.coverUpDescription = "Existing dark line work.";
   populated.readiness.healthDetails = "Details for studio review.";
-  await assertSucceeds(setDoc(applicationRef("client-one"), populated));
+  await assertSucceeds(createPaired(applicationRef("client-one"), populated));
 
   const empty = validApplication();
   empty.instagram = "";
   empty.coverUp.coverUpDescription = "";
   empty.readiness.healthDetails = "";
-  await assertSucceeds(setDoc(applicationRef("client-one"), empty));
+  await assertSucceeds(createPaired(applicationRef("client-one"), empty));
 });
 
 test("original applications are private even to the submitting client", async () => {
@@ -257,3 +260,14 @@ test("inactive admins and users without active admin records have no administrat
     await assertFails(updateDoc(ref, { status: "reviewing" }));
   }
 });
+
+async function createPaired(ref, data) {
+  const { writeBatch } = require("firebase/firestore");
+  const { portalProjection } = await import("../../lib/portalProjection.mjs");
+  const name = ref.parent.id, approved = portalProjection(name, data);
+  const batch = writeBatch(ref.firestore);
+  batch.set(ref, data);
+  batch.set(doc(ref.firestore, "portalRecords", name, "records", ref.id), approved);
+  batch.set(doc(ref.firestore, "publicationRecords", name, "records", ref.id), { schemaVersion: 1, state: "approved", mode: "client_origin", actorUid: data.clientUid, reviewedAt: require("firebase/firestore").serverTimestamp(), fenceEpoch: "test", approved });
+  return batch.commit();
+}

@@ -1,3 +1,4 @@
+import { assertServerWritesOpen } from "@/lib/safety/serverFence.mjs";
 import { getFirebaseAdmin } from "@/lib/server/firebaseAdmin";
 import { authorizedWorker, runNotifications } from "@/lib/notifications/worker.mjs";
 export const runtime = "nodejs";
@@ -7,6 +8,7 @@ export async function GET(request) {
   if (!authorizedWorker(request, process.env.CRON_SECRET)) return Response.json({ error: "access_denied" }, { status: 403, headers });
   try {
     const { firestore, auth } = getFirebaseAdmin();
+    await assertServerWritesOpen(firestore);
     return Response.json(await runNotifications(firestore, auth), { headers });
   } catch { return Response.json({ error: "notification_worker_unavailable" }, { status: 503, headers }); }
 }

@@ -1,5 +1,10 @@
 # In-place operator adapter — design for separate implementation review
 
+> Phase 6A development update: [enforced fence and publication controls](write-fence-publication-controls.md)
+> supersedes earlier repository gap descriptions and cached-source-only behavior.
+> The live rules/writers are unverified and no production operation is authorized.
+
+
 **Design only. Not an executable production adapter.** Production stays in
 `fawcett-website-sandbox`; `fawcett-website` is untouched. Keep
 `lib/migration/runtime.mjs` and `.env.example` demo-only. Do not add a production flag

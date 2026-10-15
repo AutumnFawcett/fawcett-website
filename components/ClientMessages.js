@@ -1,5 +1,6 @@
 "use client";
 
+import { assertBrowserWritesOpen } from "@/lib/safety/browserFence";
 import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
 
 import { useEffect, useMemo, useState } from "react";
@@ -169,6 +170,7 @@ export default function ClientMessages() {
 
     try {
       if (authMode === "signup") {
+        await assertBrowserWritesOpen(db);
         const credential = await createUserWithEmailAndPassword(
           auth,
           authEmail,
@@ -199,7 +201,9 @@ export default function ClientMessages() {
     } catch (error) {
       console.error(error);
 
-      if (error.code === "auth/email-already-in-use") {
+      if (error.code === "maintenance") {
+        setAuthError(error.message);
+      } else if (error.code === "auth/email-already-in-use") {
         setAuthError(
           "This email already has an account. Try logging in instead."
         );

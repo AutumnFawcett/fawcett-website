@@ -1,5 +1,10 @@
 # Coordinated privacy rollout and rollback runbook
 
+> Phase 6A development update: [enforced fence and publication controls](write-fence-publication-controls.md)
+> supersedes earlier repository gap descriptions and cached-source-only behavior.
+> The live rules/writers are unverified and no production operation is authorized.
+
+
 **Phase 4A decision:** retain `fawcett-website-sandbox` as production. `fawcett-website` is not a destination and remains untouched. Use the [in-place readiness plan](in-place-production-readiness.md), [owner checklist](production-inventory-checklist.md) and [adapter design](in-place-adapter-design.md). Cross-project instructions are deferred; no production operation is authorized.
 
 **Status: review-only plan. No production authorization, access or deployment has

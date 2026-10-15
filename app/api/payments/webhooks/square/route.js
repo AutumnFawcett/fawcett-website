@@ -1,3 +1,4 @@
+import { assertServerWritesOpen } from "@/lib/safety/serverFence.mjs";
 import { getFirebaseAdmin } from "@/lib/server/firebaseAdmin";
 import { getSquareConfig } from "@/lib/server/squareConfig";
 import { handleSquareWebhook } from "@/lib/payments/squareWebhookHandler";
@@ -11,7 +12,7 @@ export function POST(request) {
   return handleSquareWebhookRequest(request, {
     getConfig: getSquareConfig,
     getFirebaseAdmin,
-    handleWebhook: handleSquareWebhook,
+    handleWebhook: async input => { await assertServerWritesOpen(input.firestore); return handleSquareWebhook(input); },
     now: () => FieldValue.serverTimestamp(),
     logger: console,
   });

@@ -130,6 +130,7 @@ test("partial committed runs resume without duplicate writes and preserve withhe
   const tx = runtime.firestore.batch();
   tx.create(runtime.firestore.doc(`migrationRuns/${base.runId}`), { manifestHash: fingerprint(base), syntheticOnly: true });
   tx.create(runtime.firestore.doc(view(approval.path)), candidateProjection("clients", (await runtime.firestore.doc(approval.path).get()).data()));
+  tx.create(runtime.firestore.doc(`publicationRecords/clients/records/${approval.path.split("/")[1]}`), { schemaVersion: 1, state: "approved", runId: base.runId, sourceHash: approval.sourceHash, projectionHash: approval.projectionHash, approved: candidateProjection("clients", (await runtime.firestore.doc(approval.path).get()).data()) });
   tx.create(runtime.firestore.doc(`migrationRuns/${base.runId}/records/${fingerprint(approval.path)}`), { path: approval.path, state: "committed", manifestHash: fingerprint(base), sourceHash: approval.sourceHash, projectionHash: approval.projectionHash, reviewerUid: REVIEWER });
   await tx.commit();
   const result = await apply(base);
@@ -238,4 +239,18 @@ test("CLI requires explicit gates and new private reports; plan, resume and roll
     assert.equal(JSON.parse(fs.readFileSync(rolledBack)).counts.rolled_back, 13);
     assert.deepEqual(await sourceHashes(), before);
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
+});
+
+test("migration approvals are durable and rollback cannot withdraw a later independent publication", async () => {
+  const base = await manifest(); await apply(base);
+  const first = base.approvals[0], [name, id] = first.path.split("/");
+  const policy = runtime.firestore.doc(`publicationRecords/${name}/records/${id}`);
+  assert.equal((await policy.get()).data().state, "approved");
+  await policy.update({ runId: "later-reviewed-publication" });
+  assert.equal((await planMigration(runtime, base)).records.find(row => row.path === first.path).reason, "publication_policy_changed");
+  const result = await rollback(base);
+  assert.equal(result.records.find(row => row.path === first.path).state, "error");
+  assert.equal((await runtime.firestore.doc(view(first.path)).get()).exists, true);
+  const rolled = base.approvals[1], [otherName, otherId] = rolled.path.split("/");
+  assert.equal((await runtime.firestore.doc(`publicationRecords/${otherName}/records/${otherId}`).get()).data().state, "withheld");
 });

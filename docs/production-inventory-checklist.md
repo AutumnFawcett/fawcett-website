@@ -1,5 +1,10 @@
 # Owner checklist — retained production backend (Phase 4A)
 
+> Phase 6A development update: [enforced fence and publication controls](write-fence-publication-controls.md)
+> supersedes earlier repository gap descriptions and cached-source-only behavior.
+> The live rules/writers are unverified and no production operation is authorized.
+
+
 **Read only, outside Codex.** Retain `fawcett-website-sandbox`; it contains real
 clients despite its name. Do not access/change `fawcett-website` for this plan.
 Do not edit/save settings, create/delete accounts, export client data, start backups,

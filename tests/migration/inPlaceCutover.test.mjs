@@ -91,12 +91,14 @@ test("existing conversation selection, messages and reply/read-state writes work
   await assert.rejects(read(doc(db, "messages", "rehearsal-sensitive-message")), { code: "permission-denied" });
 });
 
-test("source-only legacy intake stays private and requires explicit reconciliation rather than silent backfill", async () => {
+test("cached source-only intake is rejected; pre-existing private originals still require reviewed reconciliation", async () => {
   await login();
-  // Existing proposed rules permit a valid private source-only create. This is
-  // an availability/reconciliation requirement, not a legacy-read exception.
+  // The fence protocol rejects cached source-only writers even after reopening.
+  // Simulate a pre-cutover source separately using the synthetic operator SDK.
   const original = doc(db, "consultRequests", "in-place-legacy-intake");
-  await setDoc(original, { clientUid: OWNER, clientName: "Synthetic Alice", clientEmail: `${OWNER}@example.test`, status: "new", request: { tattooIdea: "Synthetic old-form request" }, readiness: { healthNotes: "Synthetic medical detail stays private" }, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  await assert.rejects(setDoc(original, { clientUid: OWNER, clientName: "Synthetic Alice", clientEmail: `${OWNER}@example.test`, status: "new", request: { tattooIdea: "Synthetic old-form request" }, readiness: { healthNotes: "Synthetic medical detail stays private" }, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }), { code: "permission-denied" });
+  assert.equal((await runtime.firestore.doc(original.path).get()).exists, false);
+  await runtime.firestore.doc(original.path).set({ clientUid: OWNER, clientName: "Synthetic Alice", status: "new", readiness: { healthNotes: "Synthetic medical detail stays private" } });
   await assert.rejects(read(original), { code: "permission-denied" });
   assert.equal((await runtime.firestore.doc(original.path).get()).data().readiness.healthNotes, "Synthetic medical detail stays private");
   assert.equal((await runtime.firestore.doc("portalRecords/consultRequests/records/in-place-legacy-intake").get()).exists, false);

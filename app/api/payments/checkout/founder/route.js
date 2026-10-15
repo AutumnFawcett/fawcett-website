@@ -1,3 +1,4 @@
+import { assertServerWritesOpen } from "@/lib/safety/serverFence.mjs";
 import { handleFounderCheckoutRequest, createIdempotentFounderCheckout } from "@/lib/payments/founderCheckoutApi";
 import { getFirebaseAdmin } from "@/lib/server/firebaseAdmin";
 import { verifyFirebaseBearer } from "@/lib/server/firebaseBearerAuth";
@@ -15,8 +16,10 @@ export function POST(request) {
     getConfig: () => getFounderLaunchConfig(),
     getCheckoutDependencies: async () => {
       const { firestore } = getFirebaseAdmin();
+      await assertServerWritesOpen(firestore);
       const config = getFounderLaunchConfig();
-      return { storage: createFounderCheckoutStorage(firestore, createPaymentOrderStorage(firestore)), provider: await createSquarePaymentLinkProvider(config), now: () => new Date() };
+      const provider = await createSquarePaymentLinkProvider(config);
+      return { storage: createFounderCheckoutStorage(firestore, createPaymentOrderStorage(firestore)), provider: { createPaymentLink: async values => { await assertServerWritesOpen(firestore); return provider.createPaymentLink(values); } }, now: () => new Date() };
     },
     checkout: createIdempotentFounderCheckout,
   });

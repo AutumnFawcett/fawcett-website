@@ -1,5 +1,6 @@
 "use client";
 
+import { assertBrowserWritesOpen } from "@/lib/safety/browserFence";
 import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
 
 import { useState } from "react";
@@ -102,6 +103,7 @@ export default function TattooPortalLogin() {
     clearMessages();
 
     try {
+      await assertBrowserWritesOpen(db);
       const credential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -129,7 +131,9 @@ export default function TattooPortalLogin() {
     } catch (error) {
       console.error(error);
 
-      if (error.code === "auth/email-already-in-use") {
+      if (error.code === "maintenance") {
+        setErrorMessage(error.message);
+      } else if (error.code === "auth/email-already-in-use") {
         setErrorMessage(
           "This email already has an account. Try Tattoo Portal Login instead."
         );
