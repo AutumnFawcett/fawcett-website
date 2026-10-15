@@ -5905,3 +5905,18 @@ img {
 .founders-return p { color: #d5ccd1; line-height: 1.7; }
 .founders-return-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .founders-return-actions a { padding: 12px 18px; border: 1px solid #ff4faa; color: #fff; text-decoration: none; }
+
+/* Studio files share the existing responsive black, white and blue admin UI. */
+.studio-client-manager { margin-bottom: 3rem; }
+.studio-fields { min-width: 0; display: grid; gap: 1rem; }
+.studio-client-manager .application-detail-panel { min-width: 0; }
+.studio-client-manager .detail-card { margin-bottom: 1rem; }
+.studio-client-manager select { width: 100%; }
+.studio-record-id { overflow-wrap: anywhere; }
+.studio-duplicate-review { padding: 1rem; border: 1px solid #368cf0; border-radius: 1rem; }
+.studio-client-manager .studio-check { display: flex; align-items: flex-start; font-weight: 400; }
+.studio-client-manager .studio-check input { width: auto; margin-top: .25rem; }
+.studio-client-manager .button { white-space: normal; }
+.studio-client-manager > .panel-heading { display: block; }
+.studio-client-manager .application-card { min-width: 0; overflow-wrap: anywhere; }
+.studio-client-manager .review-controls label { min-width: 0; }
