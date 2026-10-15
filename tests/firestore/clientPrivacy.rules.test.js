@@ -22,7 +22,7 @@ before(async () => {
   admin = await import("../../lib/adminFirestore.js");
   portal = await import("../../lib/portalFirestore.js");
   projection = await import("../../lib/portalProjection.mjs");
-  env = await initializeTestEnvironment({ projectId: "demo-fawcett-privacy", firestore: { rules: fs.readFileSync(path.resolve("firestore.rules"), "utf8") } });
+  env = await initializeTestEnvironment({ projectId: "demo-fawcett-dev", firestore: { rules: fs.readFileSync(path.resolve("firestore.rules"), "utf8") } });
 });
 beforeEach(async () => {
   await env.clearFirestore();
@@ -207,7 +207,11 @@ test("admin replies, appointments and recorded payments retain relationships and
   assert.equal(safePayment.projectId, project.id); assert.equal(safePayment.appointmentId, appointment.id);
   assert.equal(safePayment.amountCents, 10000); assert.equal(safePayment.reference, undefined);
   const conversation = await admin.addDoc(collection(database, "conversations"), { ...identity, subject: "Synthetic" });
-  const message = await admin.addDoc(collection(database, "messages"), { clientUid: "alice", conversationId: conversation.id, senderUid: "admin", senderRole: "admin", senderName: "Studio", body: "Approved reply", createdAt: serverTimestamp() });
+  // Rules-unit contexts do not have Firebase Auth sessions or an HTTP server.
+  // Exercise the legacy direct-write rules here; authenticated addDoc messaging
+  // is covered with real synthetic Auth tokens in notifications/workflows.
+  const message = doc(collection(database, "messages"));
+  await admin.setDoc(message, { clientUid: "alice", conversationId: conversation.id, senderUid: "admin", senderRole: "admin", senderName: "Studio", body: "Approved reply", createdAt: serverTimestamp() });
   const safeMessage = (await getDoc(view(db(), "messages", message.id))).data();
   assert.equal(safeMessage.body, "Approved reply"); assert.equal(safeMessage.conversationId, conversation.id);
   assert.equal(safeMessage.senderUid, undefined);
