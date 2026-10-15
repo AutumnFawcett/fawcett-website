@@ -13,9 +13,10 @@
     "seed:emulators": "node scripts/local-command.mjs node scripts/seed-emulators.mjs",
     "test:environment": "node --test tests/environment/*.test.mjs",
     "test:integration": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test tests/environment/*.integration.mjs\"",
-    "test": "npm run test:environment && npm run test:payments && npm run test:firestore && npm run test:integration && npm run test:migration",
+    "test": "npm run test:environment && npm run test:payments && npm run test:firestore && npm run test:integration && npm run test:migration && npm run test:cross-project",
     "test:migration": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test tests/migration/*.test.mjs\"",
-    "migration:rehearsal": "node scripts/local-command.mjs node scripts/rehearse-migration.mjs"
+    "migration:rehearsal": "node scripts/local-command.mjs node scripts/rehearse-migration.mjs",
+    "test:cross-project": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore,storage \"node --test tests/cross-project/*.test.mjs\""
   },
   "dependencies": {
     "firebase": "^12.16.0",

@@ -95,3 +95,5 @@ control is uncertain. Gate 1 is only read-only inventory. Backup, migration,
 maintenance and deployment each require the separate approvals in the
 [cutover runbook](production-cutover-runbook.md). No gate has been approved by the
 current Codex task, and no live condition was verified here.
+
+Owner-confirmed cross-project direction: `fawcett-website-sandbox` → `fawcett-website`; development remains isolated. See the [cross-project approval plan](cross-project-production-plan.md) for Auth/password/session limits, destination collision policy, Storage mapping and additional gates. No live operation is authorized.

@@ -190,3 +190,5 @@ report files, reviewed fixture counts, denied unconfirmed/existing-output/unknow
 project invocations, unchanged rerun counts and rollback counts. Emulator negative
 authorization logs are expected assertions. No live policy/index/data condition was
 validated by these checks.
+
+Owner-confirmed cross-project direction: `fawcett-website-sandbox` → `fawcett-website`; development remains isolated. See the [cross-project approval plan](cross-project-production-plan.md) for Auth/password/session limits, destination collision policy, Storage mapping and additional gates. No live operation is authorized.
