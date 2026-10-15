@@ -81,3 +81,15 @@ before appearing in the portal. Use only synthetic paths/accounts here. See the
 mutation inventory, retry behavior, approval gates and read-only synthetic
 reconciliation command. Repository rules changes are approved for emulator testing
 only; production deployment remains a separate owner decision.
+
+
+## Phase 6B isolated operator rehearsal
+
+`npm run test:operator` uses only the fixed Auth/Firestore demo emulators and is
+included in `npm test`. Run emulator suites sequentially. The standalone
+`operator/` package is not imported by the website; no dependencies, secrets or
+production configuration are added. See the [operator procedure](migration-operator-procedure.md)
+for private synthetic setup/artifacts, read-only preparation, separate disabled
+grant drafts and explicitly authorized apply/withdrawal. Production execution is
+hard-disabled, not an environment flag. Existing notification, verification and
+payment off switches stay unchanged.

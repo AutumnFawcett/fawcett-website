@@ -260,3 +260,10 @@ rerun including exact original create/update server-metadata checks. The deferre
 10-case cross-project suite was **not run** under the current decision. Lint passed
 with zero errors and three existing home-page image warnings; the build passed.
 No production readiness claim or live operation follows from these local results.
+
+
+Phase 6B adds the [isolated operator procedure](migration-operator-procedure.md).
+Its production factory is disabled; no production adapter activation, access or
+migration is authorized. The new emulator-only operations add immutable complete
+scope, per-record human approvals, authenticated operation grants, transactional
+fence checks and durable apply/withdraw journals without weakening this runbook.

@@ -1,5 +1,10 @@
 # In-place operator adapter — design for separate implementation review
 
+> Phase 6B: [isolated operator implementation and procedure](migration-operator-procedure.md)
+> now provides emulator-only execution, immutable scope, separate grants and journals.
+> The production factory remains disabled; the production-specific design and
+> independent activation/security-review requirements below still apply.
+
 > Phase 6A development update: [enforced fence and publication controls](write-fence-publication-controls.md)
 > supersedes earlier repository gap descriptions and cached-source-only behavior.
 > The live rules/writers are unverified and no production operation is authorized.

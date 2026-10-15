@@ -195,3 +195,10 @@ reviewed associations remain separately controlled work. This phase establishes
 rehearsal evidence only, not production readiness signoff.
 
 Phase 4A applies the above sequence within the retained backend only: no Auth transfer, project rebinding, password migration or Storage move. Gate numbering in the [current readiness plan](in-place-production-readiness.md) is authoritative for the new approval record. Historic validations are not current production signoff.
+
+
+Phase 6B adds the [isolated operator procedure](migration-operator-procedure.md).
+Its production factory is disabled; no production adapter activation, access or
+migration is authorized. The new emulator-only operations add immutable complete
+scope, per-record human approvals, authenticated operation grants, transactional
+fence checks and durable apply/withdraw journals without weakening this runbook.

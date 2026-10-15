@@ -279,3 +279,10 @@ withdrawals, Firebase Auth read access for identity checks, and separately scope
 backup/restore/Storage permissions; do not grant browser admins service credentials.
 Production Vercel settings must continue to use `fawcett-website-sandbox`; changes
 require owner approval outside Codex. No new secret is needed in development.
+
+
+Phase 6B adds the [isolated operator procedure](migration-operator-procedure.md).
+Its production factory is disabled; no production adapter activation, access or
+migration is authorized. The new emulator-only operations add immutable complete
+scope, per-record human approvals, authenticated operation grants, transactional
+fence checks and durable apply/withdraw journals without weakening this runbook.
