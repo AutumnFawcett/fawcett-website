@@ -1,42 +1,45 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
-## Getting Started
+## Safe local development
 
-Install dependencies with npm:
+Treat the existing Firebase project as production because it may contain real client records, regardless of its display name. Do not put its configuration, service-account keys, or data into Codex.
+
+Use Node.js 24, npm, and Java 21 for the Firebase emulators. This project uses JavaScript and the Next.js App Router.
 
 ```bash
-npm install
+npm ci --cache /workspace/.npm-cache --no-audit --no-fund
+# Optional: copy only if .env.local does not already exist. Do not overwrite user files.
+cp -n .env.example .env.local
+npm run emulators
 ```
 
-Copy the example environment file and fill in the Firebase configuration values:
+In another terminal, seed fixed synthetic records and start the website:
 
 ```bash
-cp .env.example .env.local
-```
-
-Start the development server:
-
-```bash
+npm run seed:emulators
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Auth, Firestore, and Storage connect only to loopback ports 9099, 8080, and 9199 for the nonexistent Firebase project `demo-fawcett-dev`. The emulator CLI is explicitly pinned to that demo project and `firebase.emulators.json`. No Firebase login or cloud credentials are required. Emulator data is disposable; rerun the seed after restarting. Never import a production export.
 
-Run lint checks:
+Synthetic login fixtures are `admin@example.test` and `client@example.test`, both with the intentionally public emulator-only password `Synthetic-only-123!`. These are not real accounts. Seeding is repeatable and touches only fixed synthetic emulator IDs. No payment records, checkout sessions, subscriptions, or notifications are activated.
+
+The six browser Firebase app settings can remain unset locally. Missing emulators cause connection failures, never a fallback to live Firebase. Local builds also use emulators even though Next sets `NODE_ENV=production`. Development and Preview reject live Firebase configuration and service-account credentials. Only an actual Vercel Production build may use the existing live configuration. See [environment safety](docs/development-environment.md) for details and cloud startup instructions.
 
 ```bash
 npm run lint
-```
-
-Create a production build:
-
-```bash
 npm run build
+npm test
+# Or run individual suites:
+npm run test:environment
+npm run test:payments
+npm run test:firestore
+npm run test:integration
 ```
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+`npm test` manages temporary emulators itself. Stop the development emulator process first to avoid occupied ports. A local build can complete without running emulators; functional Auth/Firestore checks require them. The checked-in Firestore rules are tested unchanged; Phase 0 does not fix the privacy findings from the audit.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+For a build smoke test, use `npm run start` after `npm run build`. Emulator browser endpoints assume the browser is on the same machine. A remote Codex browser would need approved forwarding of the emulator ports; do not point it at production to work around this.
 
 ## Learn More
 
