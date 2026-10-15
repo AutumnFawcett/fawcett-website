@@ -5,7 +5,7 @@ import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { initializeApp as initBrowser, deleteApp as deleteBrowser } from "firebase/app";
-import { getAuth as browserAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { getAuth as browserAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, reload } from "firebase/auth";
 import { getFirestore as browserDb, connectFirestoreEmulator, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { firebaseEnvironment, DEMO_PROJECT_ID } from "../../lib/firebaseEnvironment.mjs";
 import { notificationConfig } from "../../lib/notifications/config.mjs";
@@ -272,4 +272,60 @@ test("scheduled worker composes safe configuration, discovery and local sink; of
   assert.deepEqual(result, { discovered: 2, attempted: 2 });
   assert.ok((await jobs()).every(s => s.data().status === "test_delivered" && s.data().providerId.startsWith("test_")));
   assert.deepEqual(await runNotifications(db, auth, env), { discovered: 0, attempted: 0 });
+});
+
+test("all five admin workflows preserve selected record links when reusing existing conversations", async () => {
+  const cases = [
+    { workflow: "AdminInbox", key: "consultRequestId", collection: "consultRequests", type: "consultRequest", existing: true },
+    ...[["consultRequestId", "consultRequests", "consult"], ["applicationId", "membershipApplications", "application"], ["membershipOfferResponseId", "membershipOfferResponses", "offer_response"], ["membershipChangeRequestId", "membershipChangeRequests", "membership_request"]].map(([key, collection, type]) => ({ workflow: "AdminIntakeDashboard", key, collection, type })),
+    { workflow: "AdminMembershipRequests", key: "membershipChangeRequestId", collection: "membershipChangeRequests", type: "membershipChangeRequest" },
+    { workflow: "AdminMembershipOffers", key: "applicationId", collection: "membershipApplications", type: "membershipApplication" },
+    { workflow: "AdminMembershipOfferResponses", key: "membershipOfferResponseId", collection: "membershipOfferResponses", type: "membershipOfferResponse" },
+  ];
+  await signInWithEmailAndPassword(ba, `${adminUid}@example.test`, password);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => url === "/api/admin/messages" ? handleAdminMessage(new Request("http://localhost/api/admin/messages", options), { firestore: db, authenticate }) : originalFetch(url, options);
+  try {
+    for (let index = 0; index < cases.length; index++) {
+      const item = cases[index], linkedId = `selected-${index}`, conversationId = `selected-conversation-${index}`;
+      await seed("membershipApplications", `application-${index}`);
+      await seed(item.collection, linkedId, item.key === "membershipOfferResponseId" ? { applicationId: `application-${index}` } : {});
+      const base = item.key === "membershipOfferResponseId" ? { applicationId: `application-${index}` } : {};
+      await seed("conversations", conversationId, { ...base, ...(item.existing ? { [item.key]: linkedId } : {}) });
+      const ref = await adminAddDoc(collection(bd, "messages"), { conversationId, clientUid, senderUid: adminUid, senderRole: "admin", body: `Synthetic ${item.workflow} reply`, ...base, [item.key]: linkedId, sourceType: item.type, sourceId: linkedId });
+      const message = (await db.doc(ref.path).get()).data();
+      assert.equal(message[item.key], linkedId, item.workflow); assert.equal(message.sourceId, linkedId); assert.equal(message.sourceType, item.type);
+      if (base.applicationId) assert.equal(message.applicationId, base.applicationId);
+      assert.equal((await db.doc(`portalRecords/messages/records/${ref.id}`).get()).data()[item.key], linkedId);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+  // The combined intake/message fixtures exceed one 20-job worker batch.
+  await discover(); await processJobs(); await processJobs();
+  assert.equal((await jobs()).filter(job => job.data().kind === "message_client" && job.data().status === "test_delivered").length, cases.length);
+});
+
+test("reply relationships reject other owners, conflicting conversations and a response from another application", async () => {
+  await seed("membershipApplications", "app-one"); await seed("membershipApplications", "app-two");
+  await seed("conversations", "linked-conversation", { applicationId: "app-one" });
+  await seed("membershipOfferResponses", "other-owner", { clientUid: "notifications-other", applicationId: "app-one" });
+  await seed("membershipOfferResponses", "wrong-application", { applicationId: "app-two" });
+  const input = { id: "invalid-associated-reply", conversationId: "linked-conversation", body: "Synthetic reply" };
+  for (const relationships of [{ applicationId: "app-two" }, { membershipOfferResponseId: "other-owner" }, { membershipOfferResponseId: "wrong-application" }, { to: "arbitrary@example.test" }]) assert.equal((await request({ ...input, relationships })).status, 403);
+  assert.equal((await request({ ...input, sourceType: "consult", sourceId: "app-one" })).status, 403);
+  assert.equal((await db.doc("messages/invalid-associated-reply").get()).exists, false);
+});
+
+test("new password signup is unverified; verified ownership enables future notices without automatically releasing held mail", async () => {
+  const credential = await createUserWithEmailAndPassword(ba, "new-unverified@example.test", password);
+  const uid = credential.user.uid;
+  assert.equal(credential.user.emailVerified, false);
+  await seed("consultRequests", "before-verification", { clientUid: uid }); await discover(); await processJobs();
+  const held = (await jobs()).find(job => job.data().kind === "consult_client");
+  assert.equal(held.data().reason, "verified_email_required");
+  // Synthetic emulator owner verification only; no verification email is sent.
+  await auth.updateUser(uid, { emailVerified: true }); await reload(credential.user);
+  assert.equal(credential.user.emailVerified, true);
+  await seed("consultRequests", "after-verification", { clientUid: uid }); await discover(); await processJobs();
+  assert.equal((await held.ref.get()).data().status, "held");
+  assert.ok((await jobs()).some(job => job.data().kind === "consult_client" && job.data().sourcePath.endsWith("after-verification") && job.data().status === "test_delivered"));
 });

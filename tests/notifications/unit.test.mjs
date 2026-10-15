@@ -59,3 +59,11 @@ test("Svix webhook authentication checks signed raw bytes, timestamp, rotation a
   assert.throws(() => verifyResendWebhook(raw, headers, secret, now + 301000));
   assert.throws(() => verifyResendWebhook(raw, headers, "wrong", now));
 });
+
+test("Preview cannot activate real transport even if notification switches and a dummy provider key are supplied", () => {
+  const preview = { VERCEL_ENV: "preview", NODE_ENV: "production", NOTIFICATIONS_ENABLED: "true", RESEND_API_KEY: "synthetic-not-a-key" };
+  assert.deepEqual(notificationConfig(preview), { mode: "off" });
+  assert.throws(() => notificationConfig({ ...preview, NOTIFICATIONS_MODE: "resend" }), /delivery_not_authorized/);
+  const config = notificationConfig({ ...preview, NOTIFICATIONS_MODE: "test", NOTIFICATION_ACTIVATED_AT: "2026-01-01" });
+  assert.equal(config.mode, "test");
+});
