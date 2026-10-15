@@ -17,6 +17,9 @@ if (serverEnvironment.mode === "emulator" && process.env.SQUARE_PAYMENTS_ENABLED
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
+  async headers() {
+    return [{ source: "/portal/verify-email", headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "no-store" }] }];
+  },
   agentRules: process.env.VERCEL_ENV === "production" ? undefined : false,
   // Derived from the deployment platform, never a user-supplied public override.
   env: { NEXT_PUBLIC_FIREBASE_DEPLOYMENT_ENV: process.env.VERCEL_ENV || "local" },

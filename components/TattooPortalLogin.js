@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -105,6 +107,7 @@ export default function TattooPortalLogin() {
         email,
         password
       );
+      await verifyAfterRegistration(credential.user);
 
       await updateProfile(credential.user, {
         displayName: fullName.trim(),
@@ -122,7 +125,7 @@ export default function TattooPortalLogin() {
         updatedAt: serverTimestamp(),
       });
 
-      router.push(safeDestination());
+      router.push(safeDestination() === "/founders" ? "/founders" : "/portal/verify-email");
     } catch (error) {
       console.error(error);
 

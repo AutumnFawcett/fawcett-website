@@ -1,5 +1,7 @@
 # PR #38 final integration review
 
+Historical review of commit `6dc6cdc`, before Phase 5. The [Phase 5 verification feature](portal-email-verification.md) supersedes the missing-verification implementation findings below; its production activation and operator prerequisites remain separate.
+
 The existing `codex/transactional-email-notifications` branch now includes shared development commit `1b1398551971cf16c294eab9239caf58195dd057` (merged PR #37). No separate PR, automatic PR merge or production operation is involved. Production remains `fawcett-website-sandbox`; leave `fawcett-website` untouched. Development/testing uses only fictional `demo-fawcett-dev` emulators.
 
 ## Integration and compatibility fix

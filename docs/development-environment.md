@@ -53,3 +53,8 @@ Transactional email remains off during cloud setup. See
 `npm run test:notifications` and optional `npm run notifications:test-tick` workflow.
 Do not add Resend, scheduler or production Firebase credentials to Codex. Local
 notification test mode is an in-process synthetic sink and makes no email requests.
+
+Phase 5 adds [portal email verification](portal-email-verification.md). Local
+verification uses only the Auth emulator and fictional `@example.test` addresses;
+`npm run test:verification` requires no email service credentials. Live verification
+has a separate default-off activation switch. Resend and payments remain off.

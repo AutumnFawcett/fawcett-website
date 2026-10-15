@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -142,6 +144,7 @@ export default function ConsultRequestForm() {
           form.email,
           authPassword
         );
+        await verifyAfterRegistration(credential.user);
 
         if (form.fullName.trim()) {
           await updateProfile(credential.user, {
