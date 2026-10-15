@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -172,6 +174,7 @@ export default function ClientMessages() {
           authEmail,
           authPassword
         );
+        await verifyAfterRegistration(credential.user);
 
         if (authName.trim()) {
           await updateProfile(credential.user, {

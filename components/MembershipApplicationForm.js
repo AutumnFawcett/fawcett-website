@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -117,6 +119,7 @@ export default function MembershipApplicationForm() {
           authEmail,
           authPassword
         );
+        await verifyAfterRegistration(credential.user);
 
         if (authName.trim()) {
           await updateProfile(credential.user, {

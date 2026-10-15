@@ -1,4 +1,5 @@
 import "./globals.css";
+import EmailVerificationBanner from "@/components/EmailVerificationBanner";
 
 export const metadata = {
   metadataBase: new URL("https://www.fawcetttattoos.com"),
@@ -46,7 +47,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en-CA">
-      <body>{children}</body>
+      <body><EmailVerificationBanner />{children}</body>
     </html>
   );
 }
