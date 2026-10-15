@@ -13,7 +13,7 @@
     "seed:emulators": "node scripts/local-command.mjs node scripts/seed-emulators.mjs",
     "test:environment": "node --test tests/environment/*.test.mjs",
     "test:integration": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test tests/environment/*.integration.mjs\"",
-    "test": "npm run test:environment && npm run test:payments && npm run test:firestore && npm run test:integration && npm run test:migration && npm run test:notifications && npm run test:verification && npm run test:safety && npm run test:operator",
+    "test": "npm run test:environment && npm run test:payments && npm run test:firestore && npm run test:integration && npm run test:migration && npm run test:notifications && npm run test:verification && npm run test:safety && npm run test:operator && npm run test:studio-payments",
     "test:migration": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test --test-concurrency=1 tests/migration/*.test.mjs\"",
     "migration:rehearsal": "node scripts/local-command.mjs node scripts/rehearse-migration.mjs",
     "test:notifications": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test --test-concurrency=1 tests/notifications/*.test.mjs\"",
@@ -21,7 +21,8 @@
     "test:verification": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test --test-concurrency=1 tests/verification/*.test.mjs\"",
     "test:safety": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test --test-concurrency=1 tests/safety/*.test.mjs\"",
     "operator:synthetic": "node scripts/local-command.mjs node operator/cli.mjs",
-    "test:operator": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test --test-concurrency=1 tests/operator/*.test.mjs\""
+    "test:operator": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test --test-concurrency=1 tests/operator/*.test.mjs\"",
+    "test:studio-payments": "node scripts/local-command.mjs firebase emulators:exec --config firebase.emulators.json --project demo-fawcett-dev --only auth,firestore \"node --test --test-concurrency=1 tests/studio-payments/*.test.mjs\""
   },
   "dependencies": {
     "firebase": "^12.16.0",

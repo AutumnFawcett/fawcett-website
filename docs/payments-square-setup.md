@@ -1,3 +1,8 @@
+> Historical phase notes below include superseded setup guidance. Current studio-client
+> workflows and Production/Preview scoping: [studio-client payments](studio-client-payments.md).
+> Current Codex and Preview must never use the data-bearing Firebase project, even
+> with Square Sandbox. Production remains disabled pending separate approvals.
+
 # Square payment foundation setup
 
 Phase 1B adds a server-only checkout service and Square Payment Link adapter. API and UI wiring are deliberately deferred because the application does not yet have an established server-side Firebase ID-token verification route. There is no public checkout endpoint or redirect endpoint, and no live `/founders` button. Subscriptions, taxes, shipping, inventory, discounts, tips, gift cards, splitting, campaign totals, and credit-ledger effects remain out of scope.
@@ -64,7 +69,7 @@ Responses use `Cache-Control: no-store` and expose only stable safe errors. Succ
 
 The browser redirects only after a successful safe response. A browser URL, return/cancel navigation, query string, or client state is never payment evidence and cannot update an order or create a transaction. Payment confirmation remains exclusively controlled by a verified Square webhook.
 
-For an approved Sandbox test, use an isolated Firebase project, Sandbox Square credentials, and a test account; enable the flag only in that isolated runtime, sign in through the Tattoo Portal, select each fixed offer, and verify the resulting Square-hosted URL and webhook reconciliation. Exercise duplicate and ambiguous requests with the same retry token, confirm one internal order and stable Square idempotency key, and inspect creating orders before retrying reconciliation. Keep `SQUARE_PAYMENTS_ENABLED=false` everywhere else pending separate approval, and never test against production services or promote the preview.
+Current automated testing uses only `demo-fawcett-dev` emulators, synthetic accounts and a mocked Square adapter. Historical September Sandbox checkout evidence is retained in PR #20; its branch-scoped Firebase recipe must not be repeated. Any new provider Sandbox exercise needs a separately reviewed isolated test design compatible with current guards, outside this Codex task. Keep all actual runtime payment switches false.
 
 ## `paymentOrders/{orderId}`
 
@@ -72,14 +77,9 @@ The create-only initial document uses a server-generated ID of at most 40 charac
 
 The adapter accepts only trusted order and offer values and validates non-empty Square link/order IDs, an HTTPS `square.link` or `checkout.square.site` URL, and any returned order total/currency before persistence. An unclassified SDK exception has an ambiguous provider outcome, so it leaves the order `creating` and returns only a safe reconciliation-required error; `provider_creation_failed` is reserved for a future explicitly classified definitive rejection and is never inferred from arbitrary exception fields. Malformed received responses retain only `provider_response_invalid`; raw errors and secrets are not stored or logged. If Square returns a valid link but the conditional Firestore attachment fails, the order likewise remains `creating` with its original order ID and idempotency key for reconciliation. The server-only reconciliation service reloads that exact order, verifies its embedded order ID and environment, and repeats the idempotent provider request rather than creating a new internal order. Neither ambiguous failure returns the checkout URL.
 
-## Local Sandbox testing
+## Local synthetic testing
 
-1. Keep `SQUARE_PAYMENTS_ENABLED=false` for normal automated tests. Tests inject a fake adapter and must never contact Square.
-2. For a separately approved manual Sandbox checkout test only, use a dedicated non-production Firebase project, set `SQUARE_ENVIRONMENT=sandbox`, temporarily enable the flag only in the isolated test runtime, and use Square Sandbox credentials.
-3. Create a Sandbox webhook subscription in the Square Developer Dashboard.
-4. Expose the local webhook route through an HTTPS tunnel and use its exact URL in Square and `SQUARE_WEBHOOK_NOTIFICATION_URL`.
-5. Confirm the Payment Link creates a distinct internal ID and Square order ID, then confirm its completed webhook atomically creates one charge and marks the order paid.
-6. Disable the flag immediately after the isolated exercise and run all project checks.
+Run `npm run test:payments` for the existing mocked financial service tests and `npm run test:studio-payments` for the new Auth/Firestore emulator bridge tests. `npm test` includes both. Keep `SQUARE_PAYMENTS_ENABLED=false` and `SQUARE_STUDIO_PAYMENTS_ENABLED=false`; tests inject enabled configuration only into mocked services. Never enter Square credentials, expose emulator services through a public tunnel, or supply live Firebase settings to Codex/Preview. The [studio payment procedure](studio-client-payments.md) defines later approval gates.
 
 The webhook handler performs no Square API request. It validates `x-square-hmacsha256-signature` as Base64 HMAC-SHA-256 over the exact notification URL concatenated with the exact raw body, using constant-time comparison. JSON parsing happens only afterward.
 
@@ -89,7 +89,7 @@ To rotate a token, Firebase credential, or Square webhook signature key, create 
 
 `SQUARE_PAYMENTS_ENABLED=false` is the payment-creation kill switch. Phase 1A does not create payments at all, and later checkout code must refuse new payment creation unless this value is exactly `true`. Disabling checkout must **not** disable the webhook route: refunds, disputes, delayed status changes, and already in-flight payments can arrive after new sales stop. Keep webhook verification and recording online until all in-flight transactions are reconciled and the provider retention window has passed.
 
-The service checks the kill switch before creating a Firestore record or invoking Square. If link creation or strict response validation fails, the order moves from `creating` to `creation_failed` with a safe code and can be reconciled without exposing provider details. Roll back checkout by setting the flag to `false`; continue processing webhooks for existing orders. A success/cancel browser redirect is presentation only and must never mark an order paid—only a verified, matched completed webhook can do so.
+The service checks the kill switch before creating a Firestore record or invoking Square. Ambiguous link-creation or attachment failures retain the original `creating` order and idempotency key. A malformed provider response can mark it `creation_failed` and requires reviewed reconciliation; never assume that means no payable provider link exists. Roll back checkout by setting the flag to `false`; continue processing webhooks for existing orders. A success/cancel browser redirect is presentation only and must never mark an order paid—only a verified, matched completed webhook can do so.
 
 An otherwise valid completed payment whose Square order ID has no mapping yet is recorded as `retryable_unlinked`, not terminally deduplicated. This permits an identical signed event to be processed after the trusted mapping becomes visible while continuing to report unrelated provider orders as ignored. Payload-hash collision checks still run before every retry, and processed events remain terminally idempotent.
 

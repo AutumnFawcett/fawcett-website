@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import StudioPayments from "./StudioPayments";
 import { useRouter } from "next/navigation";
 import {
   onAuthStateChanged,
@@ -9,22 +10,8 @@ import {
   signOut,
 } from "firebase/auth";
 import { collection, doc, getDoc, onSnapshot, query, serverTimestamp } from "firebase/firestore";
-import { addDoc, updateDoc } from "@/lib/adminFirestore";
+import { updateDoc } from "@/lib/adminFirestore";
 import { auth, db } from "@/lib/firebaseClient";
-
-const paymentTypeOptions = [
-  { value: "consult_fee", label: "Consult Fee" },
-  { value: "booking_fee_deposit", label: "Booking Fee / Deposit" },
-  { value: "tattoo_session_payment", label: "Tattoo Session Payment" },
-  { value: "design_fee", label: "Design Fee" },
-  { value: "supply_fee", label: "Supply Fee" },
-  { value: "touch_up_fee", label: "Touch-Up Fee" },
-  { value: "membership_initial_payment", label: "Membership Initial Payment" },
-  { value: "membership_monthly_payment", label: "Membership Monthly Payment" },
-  { value: "product_aftercare", label: "Product / Aftercare" },
-  { value: "refund", label: "Refund" },
-  { value: "other", label: "Other" },
-];
 
 const paymentMethodOptions = [
   { value: "cash", label: "Cash" },
@@ -40,16 +27,6 @@ const paymentMethodOptions = [
   },
   { value: "in_studio_credit", label: "In-Studio Credit" },
   { value: "other", label: "Other" },
-];
-
-const creditHandlingOptions = [
-  { value: "none", label: "No Credit Change" },
-  { value: "adds_in_studio_credit", label: "Adds In-Studio Credit" },
-  { value: "uses_in_studio_credit", label: "Uses In-Studio Credit" },
-  {
-    value: "refunds_or_removes_credit",
-    label: "Refunds / Removes In-Studio Credit",
-  },
 ];
 
 const paymentStatusOptions = [
@@ -107,25 +84,6 @@ function formatMoneyFromCents(cents) {
   }).format(amount);
 }
 
-function dollarsToCents(value) {
-  const numberValue = Number(value);
-
-  if (!Number.isFinite(numberValue)) return 0;
-
-  return Math.round(numberValue * 100);
-}
-
-function getClientKey(record) {
-  return record.clientUid || record.clientEmail || record.email || record.id || "";
-}
-
-function getTodayInputValue() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-const DEFAULT_RECEIVED_DATE = getTodayInputValue();
-
-
 export default function AdminPayments() {
   const router = useRouter();
 
@@ -136,11 +94,6 @@ export default function AdminPayments() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [clientProfiles, setClientProfiles] = useState([]);
-  const [consults, setConsults] = useState([]);
-  const [applications, setApplications] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [appointments, setAppointments] = useState([]);
   const [payments, setPayments] = useState([]);
 
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
@@ -148,18 +101,6 @@ export default function AdminPayments() {
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [methodFilter, setMethodFilter] = useState("all");
-
-  const [paymentClientKey, setPaymentClientKey] = useState("");
-  const [paymentProjectId, setPaymentProjectId] = useState("");
-  const [paymentAppointmentId, setPaymentAppointmentId] = useState("");
-  const [paymentType, setPaymentType] = useState("tattoo_session_payment");
-  const [paymentMethod, setPaymentMethod] = useState("etransfer");
-  const [creditHandling, setCreditHandling] = useState("none");
-  const [paymentStatus, setPaymentStatus] = useState("paid");
-  const [amountDollars, setAmountDollars] = useState("");
-  const [receivedDate, setReceivedDate] = useState(DEFAULT_RECEIVED_DATE);
-  const [paymentReference, setPaymentReference] = useState("");
-  const [paymentNotes, setPaymentNotes] = useState("");
 
   const [selectedStatusDraft, setSelectedStatusDraft] = useState("paid");
   const [selectedNotesDraft, setSelectedNotesDraft] = useState("");
@@ -170,76 +111,9 @@ export default function AdminPayments() {
   const [actionSuccess, setActionSuccess] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const clients = useMemo(() => {
-    const clientMap = new Map();
-
-    function ensureClient(record) {
-      const key = getClientKey(record);
-
-      if (!key) return null;
-
-      if (!clientMap.has(key)) {
-        clientMap.set(key, {
-          key,
-          clientUid: record.clientUid || record.id || "",
-          clientName:
-            record.clientName ||
-            record.fullName ||
-            record.name ||
-            "Unnamed client",
-          clientEmail: record.clientEmail || record.email || "",
-          phone: record.phone || "",
-          instagram: record.instagram || "",
-        });
-      }
-
-      const client = clientMap.get(key);
-
-      client.clientUid = client.clientUid || record.clientUid || record.id || "";
-      client.clientName =
-        record.clientName ||
-        record.fullName ||
-        record.name ||
-        client.clientName ||
-        "Unnamed client";
-      client.clientEmail =
-        record.clientEmail || record.email || client.clientEmail || "";
-      client.phone = record.phone || client.phone || "";
-      client.instagram = record.instagram || client.instagram || "";
-
-      return client;
-    }
-
-    clientProfiles.forEach(ensureClient);
-    consults.forEach(ensureClient);
-    applications.forEach(ensureClient);
-    projects.forEach(ensureClient);
-    appointments.forEach(ensureClient);
-
-    return Array.from(clientMap.values()).sort((a, b) =>
-      a.clientName.localeCompare(b.clientName)
-    );
-  }, [clientProfiles, consults, applications, projects, appointments]);
-
   const selectedPayment = useMemo(() => {
     return payments.find((payment) => payment.id === selectedPaymentId) || null;
   }, [payments, selectedPaymentId]);
-
-  const availableProjects = useMemo(() => {
-    if (!paymentClientKey) return [];
-
-    return projects.filter((project) => {
-      return getClientKey(project) === paymentClientKey;
-    });
-  }, [projects, paymentClientKey]);
-
-  const availableAppointments = useMemo(() => {
-    if (!paymentClientKey) return [];
-
-    return appointments.filter((appointment) => {
-      return getClientKey(appointment) === paymentClientKey;
-    });
-  }, [appointments, paymentClientKey]);
 
   const filteredPayments = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
@@ -378,36 +252,6 @@ export default function AdminPayments() {
     }
 
     subscribeToCollection(
-      "clients",
-      setClientProfiles,
-      "Could not load clients. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "consultRequests",
-      setConsults,
-      "Could not load consult requests. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "membershipApplications",
-      setApplications,
-      "Could not load applications. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "projects",
-      setProjects,
-      "Could not load projects. Check Firestore rules."
-    );
-
-    subscribeToCollection(
-      "appointments",
-      setAppointments,
-      "Could not load appointments. Check Firestore rules."
-    );
-
-    subscribeToCollection(
       "payments",
       setPayments,
       "Could not load payments. Check Firestore rules."
@@ -418,25 +262,6 @@ export default function AdminPayments() {
     };
   }, [user, isAdmin]);
 
-  function handlePaymentTypeChange(nextPaymentType) {
-  setPaymentType(nextPaymentType);
-
-  if (
-    nextPaymentType === "membership_initial_payment" ||
-    nextPaymentType === "membership_monthly_payment"
-  ) {
-    setCreditHandling("adds_in_studio_credit");
-  }
-}
-
-function handlePaymentMethodChange(nextPaymentMethod) {
-  setPaymentMethod(nextPaymentMethod);
-
-  if (nextPaymentMethod === "in_studio_credit") {
-    setCreditHandling("uses_in_studio_credit");
-  }
-}
-
   function handleSelectPayment(payment) {
     setSelectedPaymentId(payment.id);
     setSelectedStatusDraft(payment.status || "paid");
@@ -444,12 +269,6 @@ function handlePaymentMethodChange(nextPaymentMethod) {
     setSelectedReferenceDraft(payment.reference || "");
     setActionError("");
     setActionSuccess("");
-  }
-
-  function handleClientChange(nextClientKey) {
-    setPaymentClientKey(nextClientKey);
-    setPaymentProjectId("");
-    setPaymentAppointmentId("");
   }
 
   async function handleLogin(event) {
@@ -461,115 +280,6 @@ function handlePaymentMethodChange(nextPaymentMethod) {
     } catch (error) {
       console.error(error);
       setAuthError("Login failed. Check your email and password.");
-    }
-  }
-
-  async function createPayment(event) {
-    event.preventDefault();
-
-    const client = clients.find((item) => item.key === paymentClientKey);
-
-    if (!client) {
-      setActionError("Choose a client before recording a payment.");
-      return;
-    }
-
-    if (!client.clientUid) {
-      setActionError(
-        "This client does not have a client UID yet. Save their client profile first."
-      );
-      return;
-    }
-
-    const amountCents = dollarsToCents(amountDollars);
-
-    if (!amountCents || amountCents <= 0) {
-      setActionError("Enter a payment amount greater than $0.");
-      return;
-    }
-
-    if (
-      paymentMethod === "afterpay_financing" &&
-      amountCents > 40000
-    ) {
-      setActionError(
-        "Afterpay / Financing is currently capped at $400. Use another payment method or split the payment."
-      );
-      return;
-    }
-
-    const selectedProject = projects.find(
-      (project) => project.id === paymentProjectId
-    );
-
-    const selectedAppointment = appointments.find(
-      (appointment) => appointment.id === paymentAppointmentId
-    );
-
-    const receivedAt = receivedDate
-      ? new Date(`${receivedDate}T12:00:00`)
-      : new Date();
-
-    setIsSaving(true);
-    setActionError("");
-    setActionSuccess("");
-
-    try {
-      await addDoc(collection(db, "payments"), {
-        clientUid: client.clientUid,
-        clientName: client.clientName || "",
-        clientEmail: client.clientEmail || "",
-        phone: client.phone || "",
-        instagram: client.instagram || "",
-
-        projectId: selectedProject?.id || null,
-        projectName: selectedProject?.projectName || "",
-
-        appointmentId: selectedAppointment?.id || null,
-        appointmentTitle: selectedAppointment?.title || "",
-
-        paymentType,
-        paymentMethod,
-        creditHandling,
-        status: paymentStatus,
-
-        amountCents,
-        amountDisplay: formatMoneyFromCents(amountCents),
-        currency: "CAD",
-
-        receivedAt,
-        reference: paymentReference.trim(),
-
-        afterpayPolicy: {
-          studioCapCents: 40000,
-          requiresAdminOverrideAboveCents: 40000,
-        },
-
-        adminReview: {
-          internalNotes: paymentNotes.trim(),
-          createdBy: user.email,
-          createdAt: serverTimestamp(),
-        },
-
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      setActionSuccess("Payment recorded.");
-      setAmountDollars("");
-      setPaymentReference("");
-      setPaymentNotes("");
-      setPaymentProjectId("");
-      setPaymentAppointmentId("");
-      setPaymentType("tattoo_session_payment");
-      setPaymentMethod("etransfer");
-      setCreditHandling("none");
-      setPaymentStatus("paid");
-    } catch (error) {
-      console.error(error);
-      setActionError("Could not record payment.");
-    } finally {
-      setIsSaving(false);
     }
   }
 
@@ -858,174 +568,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         </aside>
 
         <section className="application-detail-panel">
-          <article className="admin-card payment-create-card">
-            <p className="eyebrow">Record Payment</p>
-            <h2>Add a payment or in-studio credit transaction</h2>
-
-            <form className="admin-form payment-form" onSubmit={createPayment}>
-              <label>
-                Client
-                <select
-                  value={paymentClientKey}
-                  onChange={(event) => handleClientChange(event.target.value)}
-                  required
-                >
-                  <option value="">Choose client</option>
-                  {clients.map((client) => (
-                    <option key={client.key} value={client.key}>
-                      {client.clientName} — {client.clientEmail}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Related Project
-                <select
-                  value={paymentProjectId}
-                  onChange={(event) => setPaymentProjectId(event.target.value)}
-                >
-                  <option value="">No project selected</option>
-                  {availableProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.projectName || "Unnamed project"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Related Appointment
-                <select
-                  value={paymentAppointmentId}
-                  onChange={(event) =>
-                    setPaymentAppointmentId(event.target.value)
-                  }
-                >
-                  <option value="">No appointment selected</option>
-                  {availableAppointments.map((appointment) => (
-                    <option key={appointment.id} value={appointment.id}>
-                      {appointment.title || "Appointment"} —{" "}
-                      {formatDate(appointment.startAt)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Payment Type
-                <select
-                value={paymentType}
-                onChange={(event) => handlePaymentTypeChange(event.target.value)}
-                >
-                  {paymentTypeOptions.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Payment Method
-                <select
-                value={paymentMethod}
-                onChange={(event) => handlePaymentMethodChange(event.target.value)}
-                >
-                  {paymentMethodOptions.map((method) => (
-                    <option key={method.value} value={method.value}>
-                      {method.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Credit Handling
-                <select
-                  value={creditHandling}
-                  onChange={(event) => setCreditHandling(event.target.value)}
-                >
-                  {creditHandlingOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Status
-                <select
-                  value={paymentStatus}
-                  onChange={(event) => setPaymentStatus(event.target.value)}
-                >
-                  {paymentStatusOptions.map((status) => (
-                    <option key={status.value} value={status.value}>
-                      {status.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Amount
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amountDollars}
-                  onChange={(event) => setAmountDollars(event.target.value)}
-                  placeholder="Example: 500"
-                  required
-                />
-              </label>
-
-              <label>
-                Date Received
-                <input
-                  type="date"
-                  value={receivedDate}
-                  onChange={(event) => setReceivedDate(event.target.value)}
-                  required
-                />
-              </label>
-
-              <label>
-                Reference / Receipt
-                <input
-                  type="text"
-                  value={paymentReference}
-                  onChange={(event) => setPaymentReference(event.target.value)}
-                  placeholder="E-transfer confirmation, Square receipt, note..."
-                />
-              </label>
-
-              <label>
-                Internal Notes
-                <textarea
-                  value={paymentNotes}
-                  onChange={(event) => setPaymentNotes(event.target.value)}
-                  rows={4}
-                  placeholder="Private admin notes for this payment."
-                />
-              </label>
-
-              <div className="payment-policy-note">
-                <strong>Afterpay / Financing cap:</strong> current studio cap is
-                $400 per transaction. For larger balances, split payment or use
-                another method.
-              </div>
-
-              <button
-                className="button button-primary"
-                type="submit"
-                disabled={isSaving}
-              >
-                {isSaving ? "Recording..." : "Record Payment"}
-              </button>
-            </form>
-          </article>
+          <StudioPayments user={user} />
 
           {!selectedPayment ? (
             <div className="empty-state">

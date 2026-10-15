@@ -5920,3 +5920,23 @@ img {
 .studio-client-manager > .panel-heading { display: block; }
 .studio-client-manager .application-card { min-width: 0; overflow-wrap: anywhere; }
 .studio-client-manager .review-controls label { min-width: 0; }
+
+/* Private studio payment tools share the existing black, white and blue palette. */
+.studio-payments { min-width: 0; }
+.studio-payments fieldset {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid #374151;
+}
+.studio-payments label { display: grid; gap: .4rem; min-width: 0; }
+.studio-payments input, .studio-payments select, .studio-payments textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.studio-payments input[type="checkbox"] { width: auto; justify-self: start; }
+.studio-payments li { margin-bottom: 1rem; overflow-wrap: anywhere; }
+.studio-payments a { color: #60a5fa; }
