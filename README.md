@@ -61,3 +61,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 Studio client management and production prerequisites: [Phase 2 guide](docs/admin-client-management.md).
 
 Phase 3: [synthetic migration rehearsal](docs/migration-rehearsal.md), [read-only owner inventory](docs/production-inventory-checklist.md), and [cutover/rollback gates](docs/production-cutover-runbook.md). No production execution is included.
+
+Admin scheduling: [foundation and manual transition](docs/admin-scheduling-foundation.md), [confirmed hours and holiday controls](docs/scheduling-holidays.md). Holiday references never close the studio automatically.

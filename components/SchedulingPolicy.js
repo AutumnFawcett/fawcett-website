@@ -1,5 +1,5 @@
 "use client";
-import { ARTISTS, TYPES } from "@/lib/scheduling/constants.mjs";
+import { ARTISTS, TYPES, confirmedStudioHours } from "@/lib/scheduling/constants.mjs";
 const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const label = value => value.replaceAll("_", " ");
 function WeeklyHours({ title, value, onChange }) {
@@ -8,9 +8,10 @@ function WeeklyHours({ title, value, onChange }) {
 export default function SchedulingPolicy({ policy, onChange, disabled }) {
   const update = patch => onChange({ ...policy, ...patch });
   return <fieldset disabled={disabled}><legend>Policy revision {policy.revision}</legend>
-    <p>No actual business hours are prefilled. Add opening/closing intervals in time order; leave closed days empty. Existing appointments keep their approved buffers until reviewed again.</p>
+    <p>Confirmed studio hours are Sunday–Friday 11:00–20:00; Saturday closed. Artist availability is configured separately. Add opening/closing intervals in time order; leave closed days empty. Existing appointments keep their approved buffers until reviewed again.</p>
+    <button type="button" onClick={() => update({ timezone: "America/Edmonton", timezoneApproved: true, studioHours: confirmedStudioHours() })}>Apply confirmed studio timezone and hours</button>
     <label><input type="checkbox" checked={policy.enabled} onChange={e => update({ enabled: e.target.checked })} />Enable reviewed admin scheduling</label>
-    <label>Studio timezone<input value={policy.timezone} onChange={e => update({ timezone: e.target.value, timezoneApproved: false })} /></label><p>America/Edmonton is proposed. Changing timezone with active reservations requires separate reconciliation.</p>
+    <label>Studio timezone<input value={policy.timezone} onChange={e => update({ timezone: e.target.value, timezoneApproved: false })} /></label><p>America/Edmonton is owner-confirmed. Changing timezone with active reservations requires separate reconciliation.</p>
     <label><input type="checkbox" checked={policy.timezoneApproved} onChange={e => update({ timezoneApproved: e.target.checked })} />Owner approves this studio timezone</label>
     <label>Buffer before each appointment (minutes)<input type="number" min="0" max="180" value={policy.beforeMinutes} onChange={e => update({ beforeMinutes: e.target.value === "" ? "" : Number(e.target.value) })} /></label>
     <label>Buffer after each appointment (minutes)<input type="number" min="0" max="180" value={policy.afterMinutes} onChange={e => update({ afterMinutes: e.target.value === "" ? "" : Number(e.target.value) })} /></label>
