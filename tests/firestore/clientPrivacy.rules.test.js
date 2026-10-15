@@ -204,7 +204,12 @@ test("complete membership intake, offer response, and change requests retain lin
 test("admin replies, appointments and recorded payments retain relationships and private metadata", async () => {
   const database = db("admin");
   const project = await reviewedAddDoc(collection(database, "projects"), { ...identity, projectName: "Synthetic project" });
-  const appointment = await reviewedAddDoc(collection(database, "appointments"), { ...identity, projectId: project.id, title: "Synthetic appointment", clientVisibleNotes: "Approved note", internalNotes: "Private appointment note" });
+  await assertFails(admin.addDoc(collection(database, "appointments"), { ...identity, title: "Browser bypass" }));
+  const appointment = doc(collection(database, "appointments"));
+  // Server scheduling is covered in tests/scheduling. Seed the trusted source
+  // here to retain the independent source/view privacy relationship assertions.
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), appointment.path), { ...identity, projectId: project.id, title: "Synthetic appointment", clientVisibleNotes: "Approved note", internalNotes: "Private appointment note" }));
+  await publishFixture(appointment);
   const payment = await reviewedAddDoc(collection(database, "payments"), { ...identity, projectId: project.id, appointmentId: appointment.id, amountCents: 10000, currency: "CAD", status: "paid", reference: "Private bookkeeping", adminReview: { internalNotes: "Private payment note" } });
   assert.equal((await getDoc(view(db(), "appointments", appointment.id))).data().clientVisibleNotes, "Approved note");
   const safePayment = (await getDoc(view(db(), "payments", payment.id))).data();

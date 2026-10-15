@@ -1,555 +1,90 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
-
-function timestampToMillis(timestamp) {
-  if (!timestamp) return 0;
-
-  if (timestamp instanceof Date) {
-    return timestamp.getTime();
-  }
-
-  if (typeof timestamp.toMillis === "function") {
-    return timestamp.toMillis();
-  }
-
-  return 0;
+import SchedulingPolicy from "./SchedulingPolicy";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth } from "@/lib/firebaseClient";
+import { ARTISTS, TYPES, STATUSES } from "@/lib/scheduling/constants.mjs";
+import { wall, range, navigateDate } from "@/lib/scheduling/calendar.mjs";
+const label = value => value.replaceAll("_", " ");
+async function api(path, body) {
+  const token = await auth.currentUser?.getIdToken(); if (!token) throw new Error("Sign in to continue.");
+  const response = await fetch(path, { method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${token}`, ...(body && { "Content-Type": "application/json" }) }, ...(body && { body: JSON.stringify(body) }), cache: "no-store" });
+  const result = await response.json(); if (!response.ok) throw new Error(result.error || "Schedule request failed."); return result;
 }
-
-function formatDate(timestamp) {
-  const millis = timestampToMillis(timestamp);
-
-  if (!millis) return "No date";
-
-  return new Date(millis).toLocaleString("en-CA", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
-function formatValue(value) {
-  if (value === true) return "Yes";
-  if (value === false) return "No";
-  if (value === null || value === undefined || value === "") {
-    return "Not provided";
-  }
-
-  return String(value)
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function getStatusBadgeClass(status) {
-  if (status === "confirmed" || status === "booked") {
-    return "rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-4 py-2 text-sm font-black text-white shadow-[0_0_24px_rgba(0,0,204,0.22)]";
-  }
-
-  if (status === "cancelled" || status === "no_show") {
-    return "rounded-full border border-red-400/30 bg-red-500/10 px-4 py-2 text-sm font-black text-red-100";
-  }
-
-  if (status === "completed") {
-    return "rounded-full border border-green-400/30 bg-green-500/10 px-4 py-2 text-sm font-black text-green-100";
-  }
-
-  return "rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-black text-white/75";
-}
-
-function AppointmentCard({ appointment }) {
-  return (
-    <article className="rounded-[1.5rem] border border-white/10 bg-black/35 p-5 transition hover:border-[#0000cc]/45 hover:bg-[#0000cc]/10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-white/42">
-            {formatValue(appointment.appointmentType)}
-          </p>
-
-          <h3 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
-            {appointment.title || "Studio Appointment"}
-          </h3>
-
-          <p className="mt-3 text-base font-bold leading-7 text-white/68">
-            {formatDate(appointment.startAt)}
-          </p>
-        </div>
-
-        <span className={getStatusBadgeClass(appointment.status)}>
-          {formatValue(appointment.status)}
-        </span>
-      </div>
-
-      <div className="mt-6 grid gap-3 md:grid-cols-2">
-        <div className="rounded-[1rem] border border-white/10 bg-white/[0.045] p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/38">
-            Duration
-          </p>
-          <p className="mt-2 text-sm font-bold leading-7 text-white/70">
-            {appointment.durationMinutes || 0} minutes
-          </p>
-        </div>
-
-        <div className="rounded-[1rem] border border-white/10 bg-white/[0.045] p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/38">
-            Artist / Inbox
-          </p>
-          <p className="mt-2 text-sm font-bold leading-7 text-white/70">
-            {formatValue(appointment.assignedInbox)}
-          </p>
-        </div>
-
-        <div className="rounded-[1rem] border border-white/10 bg-white/[0.045] p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/38">
-            Location
-          </p>
-          <p className="mt-2 text-sm font-bold leading-7 text-white/70">
-            {appointment.location || "Fawcett Tattoos & Art Studio"}
-          </p>
-        </div>
-
-        {appointment.projectName ? (
-          <div className="rounded-[1rem] border border-white/10 bg-white/[0.045] p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/38">
-              Project
-            </p>
-            <p className="mt-2 text-sm font-bold leading-7 text-white/70">
-              {appointment.projectName}
-            </p>
-          </div>
-        ) : null}
-      </div>
-
-      {appointment.clientVisibleNotes ? (
-        <div className="mt-5 rounded-[1rem] border border-[#0000cc]/35 bg-[#0000cc]/10 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/45">
-            Studio Notes
-          </p>
-
-          <p className="mt-2 whitespace-pre-wrap text-sm font-bold leading-7 text-white/72">
-            {appointment.clientVisibleNotes}
-          </p>
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-export default function ClientAppointments() {
-  const router = useRouter();
-
-  const [user, setUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const [appointments, setAppointments] = useState([]);
-  const [nowMillis, setNowMillis] = useState(null);
-
-  const [authError, setAuthError] = useState("");
-  const [loadError, setLoadError] = useState("");
-
-  useEffect(() => {
-    function updateNow() {
-      setNowMillis(Date.now());
-    }
-
-    updateNow();
-
-    const timer = setInterval(updateNow, 60000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  const upcomingAppointments = useMemo(() => {
-    if (!nowMillis) return [];
-
-    return appointments
-      .filter((appointment) => {
-        const startMillis = timestampToMillis(appointment.startAt);
-
-        if (!startMillis) return false;
-
-        return startMillis >= nowMillis && appointment.status !== "cancelled";
-      })
-      .sort(
-        (a, b) =>
-          timestampToMillis(a.startAt) - timestampToMillis(b.startAt)
-      );
-  }, [appointments, nowMillis]);
-
-  const pastAppointments = useMemo(() => {
-    if (!nowMillis) return [];
-
-    return appointments
-      .filter((appointment) => {
-        const startMillis = timestampToMillis(appointment.startAt);
-
-        if (appointment.status === "cancelled") return true;
-        if (!startMillis) return false;
-
-        return startMillis < nowMillis;
-      })
-      .sort(
-        (a, b) =>
-          timestampToMillis(b.startAt) - timestampToMillis(a.startAt)
-      );
-  }, [appointments, nowMillis]);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthChecked(true);
-
-      if (currentUser?.email) {
-        setEmail(currentUser.email);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
+const emptyForm = { studioClientId: "", clientUid: "", projectId: "", artistId: "", appointmentType: "tattoo_session", title: "", startLocal: "", endLocal: "", status: "booked", internalNotes: "", clientVisibleNotes: "", paymentEvidence: null, transitionReviewed: false };
+export default function AdminSchedule() {
+  const [user, setUser] = useState(null), [authReady, setAuthReady] = useState(false), [email, setEmail] = useState(""), [password, setPassword] = useState("");
+  const [date, setDate] = useState(() => wall(Date.now(), "America/Edmonton").slice(0, 10)), [view, setView] = useState("week"), [artist, setArtist] = useState("");
+  const [report, setReport] = useState(null), [clients, setClients] = useState([]), [form, setForm] = useState(emptyForm), [selected, setSelected] = useState(null);
+  const [error, setError] = useState(""), [notice, setNotice] = useState(""), [busy, setBusy] = useState(false), [reviewed, setReviewed] = useState(false);
+  const [policyDraft, setPolicyDraft] = useState(""), [policyReviewed, setPolicyReviewed] = useState(false), [reload, setReload] = useState(0);
+  const request = useRef(null), days = range(date, view), from = days[0], to = days.at(-1);
+  useEffect(() => onAuthStateChanged(auth, u => { setUser(u); setAuthReady(true); setReport(null); setClients([]); setForm(emptyForm); setSelected(null); setPolicyDraft(""); }), []);
   useEffect(() => {
     if (!user) return;
-
-    const appointmentsQuery = query(
-      collection(db, "appointments"),
-      where("clientUid", "==", user.uid)
-    );
-
-    const unsubscribe = onSnapshot(
-      appointmentsQuery,
-      (snapshot) => {
-        const nextAppointments = snapshot.docs.map((appointmentDoc) => ({
-          id: appointmentDoc.id,
-          ...appointmentDoc.data(),
-        }));
-
-        setAppointments(nextAppointments);
-        setLoadError("");
-      },
-      (error) => {
-        console.error(error);
-        setLoadError("Could not load appointments.");
-      }
-    );
-
-    return () => unsubscribe();
+    let live = true;
+    const params = new URLSearchParams({ from, to, ...(form.studioClientId && { studioClientId: form.studioClientId }), ...(selected?.id && { id: selected.id }) });
+    api(`/api/admin/schedule?${params}`).then(r => { if (live) { setReport(r); setPolicyDraft(old => old || JSON.stringify(r.policy, null, 2)); } }).catch(e => { if (live) setError(e.message); });
+    return () => { live = false; };
+  }, [user, from, to, form.studioClientId, selected?.id, reload]);
+  useEffect(() => {
+    if (!user) return;
+    let live = true;
+    (async () => {
+      const rows = []; let cursor = "";
+      do { const r = await api(`/api/admin/clients${cursor ? `?after=${encodeURIComponent(cursor)}` : ""}`); rows.push(...r.clients); cursor = r.nextCursor; if (rows.length >= 5000 && cursor) throw new Error("Client inventory needs a scoped report."); } while (cursor);
+      if (live) setClients(rows);
+    })().catch(e => { if (live) setError(e.message); });
+    return () => { live = false; };
   }, [user]);
-
-  async function handleLogin(event) {
-    event.preventDefault();
-    setAuthError("");
-
+  function change(key, value) { setForm(old => ({ ...old, [key]: value, ...(key === "studioClientId" && { clientUid: "", projectId: "", paymentEvidence: null }) })); setReviewed(false); }
+  function select(row) {
+    setSelected(row); setReviewed(false); setNotice("");
+    setForm({ ...emptyForm, ...Object.fromEntries(Object.keys(emptyForm).filter(k => k in row).map(k => [k, row[k] ?? ""])), paymentEvidence: row.paymentEvidence ? { kind: row.paymentEvidence.kind, id: row.paymentEvidence.id } : null,
+      startLocal: wall(row.startAt, report.policy.timezone), endLocal: wall(row.endAt, report.policy.timezone) });
+  }
+  async function send(body) {
+    setBusy(true); setError(""); setNotice("");
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      console.error(error);
-      setAuthError("Login failed. Check your email and password.");
-    }
+      request.current ||= sessionStorage.getItem("fawcett-schedule-request") || crypto.randomUUID();
+      sessionStorage.setItem("fawcett-schedule-request", request.current);
+      const result = await api("/api/admin/schedule", { ...body, requestId: request.current, reviewed: true });
+      request.current = null; sessionStorage.removeItem("fawcett-schedule-request");
+      if (body.action === "policy") { setPolicyDraft(""); setPolicyReviewed(false); }
+      else { setSelected({ id: result.id, revision: result.revision, legacy: false }); setReviewed(false); }
+      setNotice("Saved privately. Appointment portal details require separate publication review."); setReload(r => r + 1);
+    } catch (e) { setReviewed(false); setError(`${e.message}. Reload and re-review stale policy or appointment details. For uncertain outcomes, retain the request ID and reconcile before starting a replacement.`); }
+    finally { setBusy(false); }
   }
-
-  if (!authChecked) {
-    return (
-      <main className="min-h-screen bg-black text-white">
-        <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
-          <p className="text-sm font-black uppercase tracking-[0.28em] text-white/45">
-            Checking Tattoo Portal login...
-          </p>
-        </section>
-      </main>
-    );
-  }
-
-  if (!user) {
-    return (
-      <main className="min-h-screen bg-black text-white">
-        <section className="border-b border-white/10">
-          <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
-            <Link href="/" className="text-sm text-white/60 hover:text-white">
-              ← Back to Website
-            </Link>
-
-            <p className="mt-8 text-xs uppercase tracking-[0.32em] text-white/45">
-              Tattoo Portal
-            </p>
-
-            <h1 className="mt-4 max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
-              Appointments
-            </h1>
-
-            <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
-              Log in to view your studio appointments.
-            </p>
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-3xl px-5 py-10 md:px-8 md:py-14">
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.055] p-5 shadow-[0_0_45px_rgba(0,0,204,0.12)] md:p-8">
-            <h2 className="text-3xl font-black tracking-[-0.05em] text-white md:text-4xl">
-              Tattoo Portal Login
-            </h2>
-
-            <form className="mt-6 grid gap-5" onSubmit={handleLogin}>
-              <label className="grid gap-2 text-sm font-black text-white/80">
-                Email
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  className="min-h-14 rounded-[1rem] border border-white/10 bg-black/45 px-4 text-white outline-none transition placeholder:text-white/30 focus:border-[#0000cc]"
-                />
-              </label>
-
-              <label className="grid gap-2 text-sm font-black text-white/80">
-                Password
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  className="min-h-14 rounded-[1rem] border border-white/10 bg-black/45 px-4 text-white outline-none transition placeholder:text-white/30 focus:border-[#0000cc]"
-                />
-              </label>
-
-              {authError ? (
-                <p className="rounded-[1rem] border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold leading-7 text-red-100">
-                  {authError}
-                </p>
-              ) : null}
-
-              <button className="button button-primary w-full" type="submit">
-                Log In
-              </button>
-            </form>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main className="min-h-screen bg-black text-white">
-      <section className="border-b border-white/10">
-        <div className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
-          <p className="text-xs uppercase tracking-[0.32em] text-white/45">
-            Tattoo Portal
-          </p>
-
-          <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div>
-              <h1 className="max-w-5xl text-5xl font-black leading-[0.95] tracking-[-0.06em] md:text-7xl">
-                Appointments
-              </h1>
-
-              <p className="mt-6 max-w-3xl text-lg font-semibold leading-8 text-white/70">
-                View your upcoming consults, tattoo sessions, touch-ups, and
-                studio appointments.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:flex sm:flex-wrap lg:justify-end">
-              <Link
-                className="button button-primary justify-center"
-                href="/portal/dashboard"
-              >
-                Dashboard
-              </Link>
-
-              <Link
-                className="button button-secondary justify-center"
-                href="/portal/messages"
-              >
-                Messages
-              </Link>
-
-              <Link
-                className="button button-secondary justify-center"
-                href="/portal/project-timeline"
-              >
-                Timeline
-              </Link>
-
-              <Link
-                className="button button-secondary justify-center"
-                href="/consult"
-              >
-                Start Free Consult
-              </Link>
-
-              <Link
-                className="button button-secondary justify-center"
-                href="/portal/credit"
-              >
-                Credit
-              </Link>
-
-              <Link
-                className="button button-secondary justify-center"
-                href="/portal/membership-offers"
-              >
-                Membership Offers
-              </Link>
-
-              <button
-                className="button button-secondary justify-center"
-                type="button"
-                onClick={async () => {
-                  await signOut(auth);
-                  router.push("/tattoo-portal");
-                }}
-              >
-                Log Out
-              </button>
-            </div>
-          </div>
-
-          {loadError ? (
-            <p className="mt-6 rounded-[1rem] border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold leading-7 text-red-100">
-              {loadError}
-            </p>
-          ) : null}
-
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <article className="rounded-[1.5rem] border border-[#0000cc]/60 bg-[#0000cc]/15 p-5 shadow-[0_0_35px_rgba(0,0,204,0.18)]">
-              <p className="text-xs uppercase tracking-[0.24em] text-white/50">
-                Upcoming
-              </p>
-
-              <h2 className="mt-3 text-3xl font-black tracking-[-0.04em] text-white">
-                {upcomingAppointments.length}
-              </h2>
-
-              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
-                Future appointments currently visible in your Tattoo Portal.
-              </p>
-            </article>
-
-            <article className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                Past / Cancelled
-              </p>
-
-              <h2 className="mt-3 text-3xl font-black tracking-[-0.04em] text-white">
-                {pastAppointments.length}
-              </h2>
-
-              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
-                Completed, past, or cancelled appointment records.
-              </p>
-            </article>
-
-            <article className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                Need Changes?
-              </p>
-
-              <h2 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
-                Message Us
-              </h2>
-
-              <p className="mt-3 text-sm font-bold leading-7 text-white/65">
-                Use messages for appointment questions, healed photos, or
-                schedule updates.
-              </p>
-            </article>
-          </div>
-        </div>
+  async function login(event) { event.preventDefault(); setError(""); try { await signInWithEmailAndPassword(auth, email, password); } catch { setError("Sign-in failed."); } }
+  if (!authReady) return <main className="admin-page"><p>Checking access…</p></main>;
+  if (!user) return <main className="admin-page"><h1>Studio schedule</h1>{error && <p role="alert">{error}</p>}<form className="admin-form" onSubmit={login}><label>Email<input required type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" /></label><label>Password<input required type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" /></label><button className="button button-primary">Sign in</button></form></main>;
+  function navigate(direction) { setDate(navigateDate(date, view, direction)); }
+  const entries = (report?.entries || []).filter(r => !artist || r.resources.includes(artist));
+  const financial = report?.financial || { manual: [], square: [] };
+  const cards = day => entries.filter(r => wall(r.startAt, report.policy.timezone).slice(0, 10) === day).sort((a, b) => a.startAt - b.startAt).map(row => <button key={row.id} className={`schedule-card schedule-${row.artistId}`} onClick={() => select(row)}><strong>{row.title}</strong><span>{wall(row.startAt, report.policy.timezone).slice(11)}–{wall(row.endAt, report.policy.timezone).slice(11)} · {row.artistId}</span><span>{label(row.appointmentType)} · {row.status}</span>{row.policyRevision !== report.policy.revision && <small>Policy changed: review availability</small>}</button>);
+  return <main className="admin-page scheduling"><header className="admin-header"><div><p className="eyebrow">Private studio calendar</p><h1>Fawcett schedule</h1><p>Ben and Autumn · one chair · {report?.policy.timezone || "America/Edmonton (proposed)"}</p></div><Link href="/admin">Admin home</Link><button onClick={() => signOut(auth)}>Sign out</button></header>
+    {error && <p className="error-message" role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
+    {report && <><p>{report.policy.enabled ? "Scheduling policy enabled." : "Scheduling is closed pending reviewed configuration."} {report.policy.transitionReviewed ? "Business-calendar transition acknowledged." : "Apple Calendar transition remains under manual review; this is not yet the master calendar."}</p>
+      <nav className="schedule-toolbar" aria-label="Calendar controls"><label>Date<input type="date" required value={date} onChange={e => { if (e.target.value) setDate(e.target.value); }} /></label><button onClick={() => navigate(-1)}>Previous</button><button onClick={() => navigate(1)}>Next</button><label>View<select value={view} onChange={e => setView(e.target.value)}>{["day", "week", "month", "agenda"].map(v => <option key={v}>{v}</option>)}</select></label><button onClick={() => { setReviewed(false); setReload(r => r + 1); }}>Refresh calendar</button><label>Artist<select value={artist} onChange={e => setArtist(e.target.value)}><option value="">Both artists</option>{ARTISTS.map(a => <option key={a}>{a}</option>)}</select></label></nav>
+      <section className={`schedule-calendar schedule-view-${view}`} aria-label={`${view} calendar`}>{days.map(day => <article key={day} className="schedule-day"><h2>{day}</h2>{cards(day)}</article>)}</section>
+      <section className="admin-card"><h2>Unreviewed legacy appointments ({report.legacy.length})</h2><p>Unknown availability blocks new active bookings. Review each original individually; never guess duration, ownership or artist.</p>{report.legacy.map(row => <button className="schedule-card" key={row.id} onClick={() => select(row)}>{row.title} · {row.id} · review required</button>)}</section>
+      <section className="admin-card"><h2>{selected?.legacy ? "Review legacy appointment" : selected ? "Edit / reschedule appointment" : "Create appointment"}</h2><button disabled={busy} onClick={() => { setForm(emptyForm); setSelected(null); setReviewed(false); }}>New appointment</button>
+        <form className="admin-form" onSubmit={e => { e.preventDefault(); if (reviewed) send({ action: selected?.legacy ? "adopt" : "save", ...(selected && { id: selected.id, revision: selected.revision }), ...(selected?.legacy && { legacyFingerprint: selected.sourceHash }), policyRevision: report.policy.revision, appointment: form }); }}><fieldset disabled={busy}>
+          <label>Studio client<select value={form.studioClientId} onChange={e => change("studioClientId", e.target.value)}><option value="">No client (event/block only)</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name} — {c.id}</option>)}</select></label>
+          <label>Verified existing Auth UID (optional)<input value={form.clientUid} onChange={e => change("clientUid", e.target.value)} /></label><label>Reviewed project ID (optional)<input value={form.projectId} onChange={e => change("projectId", e.target.value)} /></label><p>IDs require pre-existing reviewed evidence. No account or link is created here.</p>
+          <label>Artist<select required value={form.artistId} onChange={e => change("artistId", e.target.value)}><option value="">Choose artist</option>{ARTISTS.map(a => <option key={a}>{a}</option>)}</select></label><label>Type<select required value={form.appointmentType} onChange={e => change("appointmentType", e.target.value)}><option value="">Choose type</option>{TYPES.map(t => <option key={t} value={t}>{label(t)}</option>)}</select></label>
+          <label>Title<input required maxLength={160} value={form.title} onChange={e => change("title", e.target.value)} /></label><label>Start ({report.policy.timezone})<input required type="datetime-local" value={form.startLocal} onChange={e => change("startLocal", e.target.value)} /></label><label>End<input required type="datetime-local" value={form.endLocal} onChange={e => change("endLocal", e.target.value)} /></label><label>Status<select value={form.status} onChange={e => change("status", e.target.value)}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></label>
+          <label>Private studio notes<textarea maxLength={4000} value={form.internalNotes} onChange={e => change("internalNotes", e.target.value)} /></label><label>Proposed client-visible notes<textarea maxLength={1000} value={form.clientVisibleNotes} onChange={e => change("clientVisibleNotes", e.target.value)} /></label><p>Saving withdraws the old portal appointment. <Link href="/admin/publication">Review and publish</Link> separately after checking the exact new record.</p>
+          <label>Payment/deposit evidence (read-only source)<select value={form.paymentEvidence ? `${form.paymentEvidence.kind}:${form.paymentEvidence.id}` : ""} onChange={e => { const [kind, id] = e.target.value.split(":"); change("paymentEvidence", id ? { kind, id } : null); }}><option value="">No evidence selected</option>{financial.manual.map(p => <option key={p.id} value={`manual:${p.id}`}>Manual bookkeeping — NOT Square-confirmed · {p.amountCents / 100} {p.currency} · {p.id}</option>)}{financial.square.filter(p => p.type === "charge" && p.status === "completed").map(p => <option key={p.id} value={`square:${p.id}`}>Square-confirmed charge · {p.amountCents / 100} {p.currency} · {p.id}</option>)}</select></label>
+          <p>Charges do not establish an available deposit balance. Review refunds/disputes below; no automatic financial action occurs.</p><ul>{financial.square.map(p => <li key={p.id}>{p.type} · {p.status} · {p.amountCents / 100} {p.currency} · {p.id}</li>)}</ul>{financial.truncated && <p role="alert">Payment report is incomplete. Operator reconciliation required.</p>}
+          {!report.policy.transitionReviewed && <label><input type="checkbox" checked={form.transitionReviewed} onChange={e => change("transitionReviewed", e.target.checked)} />Manually reviewed business-only entry from the transition checklist; no family calendar content copied.</label>}
+          <label><input type="checkbox" required checked={reviewed} onChange={e => setReviewed(e.target.checked)} />I reviewed client identity, times, resources, notes and any legacy changes.</label><button className="button button-primary" disabled={!reviewed || busy}>{selected?.legacy ? "Adopt reviewed legacy record" : "Save / reschedule privately"}</button>
+        </fieldset></form>
+        {report.audit?.length > 0 && <><h3>Appointment audit</h3><ul>{report.audit.map(a => <li key={a.id}>{a.action} · revision {a.revision} · {a.actorUid} · {a.createdAt}</li>)}</ul></>}
       </section>
-
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-10 md:px-8 md:py-14 xl:grid-cols-2">
-        <article className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 md:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
-                Upcoming Appointments
-              </p>
-
-              <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-white md:text-5xl">
-                What’s next.
-              </h2>
-            </div>
-
-            <p className="rounded-full border border-[#0000cc]/70 bg-[#0000cc]/25 px-5 py-2.5 text-lg font-black tracking-[-0.04em] text-white shadow-[0_0_30px_rgba(0,0,204,0.3)]">
-              {upcomingAppointments.length}
-            </p>
-          </div>
-
-          {upcomingAppointments.length === 0 ? (
-            <div className="mt-6 rounded-[1.25rem] border border-white/10 bg-black/35 p-5">
-              <p className="text-base font-semibold leading-8 text-white/68">
-                No upcoming appointments yet.
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Link className="button button-primary" href="/consult">
-                  Start Free Consult
-                </Link>
-
-                <Link
-                  className="button button-secondary"
-                  href="/portal/messages"
-                >
-                  Message Studio
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-6 grid gap-4">
-              {upcomingAppointments.map((appointment) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                />
-              ))}
-            </div>
-          )}
-        </article>
-
-        <article className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 md:p-7">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-white/45">
-                Past / Cancelled
-              </p>
-
-              <h2 className="mt-3 text-3xl font-black tracking-[-0.05em] text-white md:text-5xl">
-                Appointment history.
-              </h2>
-            </div>
-
-            <p className="rounded-full border border-white/10 bg-white/[0.06] px-5 py-2.5 text-lg font-black tracking-[-0.04em] text-white">
-              {pastAppointments.length}
-            </p>
-          </div>
-
-          {pastAppointments.length === 0 ? (
-            <div className="mt-6 rounded-[1.25rem] border border-white/10 bg-black/35 p-5">
-              <p className="text-base font-semibold leading-8 text-white/68">
-                No past appointments yet.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-6 grid gap-4">
-              {pastAppointments.map((appointment) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                />
-              ))}
-            </div>
-          )}
-        </article>
-      </section>
-    </main>
-  );
+      <details className="admin-card"><summary>Reviewed booking policy</summary><SchedulingPolicy policy={policyDraft ? JSON.parse(policyDraft) : report.policy} disabled={busy} onChange={policy => { setPolicyDraft(JSON.stringify(policy)); setPolicyReviewed(false); }} /><label><input type="checkbox" checked={policyReviewed} onChange={e => setPolicyReviewed(e.target.checked)} />I reviewed the hours, resources, buffers, timezone and business-calendar transition acknowledgement.</label><button disabled={!policyReviewed || busy} onClick={() => { const policy = policyDraft ? JSON.parse(policyDraft) : report.policy; send({ action: "policy", revision: policy.revision, policy }); }}>Save reviewed policy</button></details>
+    </>}
+  </main>;
 }
