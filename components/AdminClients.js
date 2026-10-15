@@ -8,8 +8,9 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { collection, doc, getDoc, onSnapshot, query, serverTimestamp } from "firebase/firestore";
-import { setDoc } from "@/lib/adminFirestore";
+import { collection, doc, getDoc, onSnapshot, query } from "firebase/firestore";
+import { legacyClientKey } from "@/lib/clients/legacyClientIdentity.mjs";
+import StudioClientManager from "@/components/StudioClientManager";
 import { auth, db } from "@/lib/firebaseClient";
 
 const clientStatusOptions = [
@@ -64,10 +65,6 @@ function formatValue(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function getClientKey(record) {
-  return record.clientUid || record.clientEmail || record.email || "";
-}
-
 function getLatestMillis(items) {
   return items.reduce((latest, item) => {
     const createdAt = timestampToMillis(item.createdAt);
@@ -106,20 +103,19 @@ export default function AdminClients() {
   const [authError, setAuthError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionSuccess, setActionSuccess] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
 
   const clients = useMemo(() => {
     const clientMap = new Map();
 
     function ensureClient(record) {
-      const key = getClientKey(record);
+      const key = legacyClientKey(record);
 
       if (!key) return null;
 
       if (!clientMap.has(key)) {
         clientMap.set(key, {
           key,
-          clientUid: record.clientUid || record.id || "",
+          clientUid: record.clientUid || "",
           clientName:
             record.clientName ||
             record.fullName ||
@@ -142,7 +138,7 @@ export default function AdminClients() {
 
       const client = clientMap.get(key);
 
-      client.clientUid = client.clientUid || record.clientUid || record.id || "";
+      client.clientUid = client.clientUid || record.clientUid || "";
       client.clientName =
         record.clientName ||
         record.fullName ||
@@ -165,7 +161,7 @@ export default function AdminClients() {
       if (!client) return;
 
       client.clientProfile = profile;
-      client.clientUid = profile.clientUid || profile.id || client.clientUid;
+      client.clientUid = profile.clientUid || client.clientUid;
       client.clientName = profile.clientName || client.clientName;
       client.clientEmail = profile.clientEmail || client.clientEmail;
       client.phone = profile.phone || client.phone;
@@ -264,6 +260,7 @@ export default function AdminClients() {
       setUser(currentUser);
       setAdminChecked(false);
       setIsAdmin(false);
+      setClientProfiles([]); setApplications([]); setConsults([]); setProjects([]); setConversations([]); setSelectedClientKey(null);
 
       if (!currentUser) {
         setAdminChecked(true);
@@ -274,13 +271,13 @@ export default function AdminClients() {
         const adminRef = doc(db, "adminUsers", currentUser.uid);
         const adminSnap = await getDoc(adminRef);
 
-        if (adminSnap.exists() && adminSnap.data().active === true) {
+        if (auth.currentUser?.uid === currentUser.uid && adminSnap.exists() && adminSnap.data().active === true) {
           setIsAdmin(true);
         }
       } catch (error) {
         console.error(error);
       } finally {
-        setAdminChecked(true);
+        if (auth.currentUser?.uid === currentUser.uid) setAdminChecked(true);
       }
     });
 
@@ -298,9 +295,11 @@ export default function AdminClients() {
       const unsubscribe = onSnapshot(
         collectionQuery,
         (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
           const nextItems = snapshot.docs.map((itemDoc) => ({
-            id: itemDoc.id,
             ...itemDoc.data(),
+            id: itemDoc.id,
+            sourceCollection: collectionName,
           }));
 
           setter(nextItems);
@@ -368,62 +367,6 @@ export default function AdminClients() {
     } catch (error) {
       console.error(error);
       setAuthError("Login failed. Check your email and password.");
-    }
-  }
-
-  async function saveClientProfile() {
-    if (!selectedClient) return;
-
-    if (!selectedClient.clientUid) {
-      setActionError("This client does not have a client UID yet.");
-      return;
-    }
-
-    setIsSaving(true);
-    setActionError("");
-    setActionSuccess("");
-
-    try {
-
-      const clientRef = doc(db, "clients", selectedClient.clientUid);
-
-      const basePayload = {
-        clientUid: selectedClient.clientUid,
-        clientName: selectedClient.clientName || "",
-        clientEmail: selectedClient.clientEmail || "",
-        phone: selectedClient.phone || "",
-        instagram: selectedClient.instagram || "",
-        preferredArtist: preferredArtistDraft,
-        status: clientStatusDraft,
-
-        stats: {
-          applicationCount: selectedClient.applications.length,
-          consultCount: selectedClient.consults.length,
-          projectCount: selectedClient.projects.length,
-          conversationCount: selectedClient.conversations.length,
-        },
-
-        adminReview: {
-          internalNotes: notesDraft,
-          lastUpdatedBy: user.email,
-          lastUpdatedAt: serverTimestamp(),
-        },
-
-        updatedAt: serverTimestamp(),
-      };
-
-      if (!selectedClient.clientProfile) {
-        basePayload.createdAt = serverTimestamp();
-      }
-
-      await setDoc(clientRef, basePayload, { merge: true });
-
-      setActionSuccess("Client profile saved.");
-    } catch (error) {
-      console.error(error);
-      setActionError("Could not save this client profile.");
-    } finally {
-      setIsSaving(false);
     }
   }
 
@@ -549,6 +492,9 @@ export default function AdminClients() {
         </div>
       </section>
 
+      <StudioClientManager key={user.uid} user={user} />
+      <h2>Legacy portal records</h2>
+      <p>These records retain their original identities. Email matches do not combine records.</p>
       <section className="admin-applications-layout">
         <aside className="applications-list-panel">
           <div className="panel-heading">
@@ -734,7 +680,7 @@ export default function AdminClients() {
                     onChange={(event) =>
                       setClientStatusDraft(event.target.value)
                     }
-                    disabled={isSaving}
+                    disabled
                   >
                     {clientStatusOptions.map((status) => (
                       <option key={status.value} value={status.value}>
@@ -751,7 +697,7 @@ export default function AdminClients() {
                     onChange={(event) =>
                       setPreferredArtistDraft(event.target.value)
                     }
-                    disabled={isSaving}
+                    disabled
                   >
                     {artistOptions.map((artist) => (
                       <option key={artist.value} value={artist.value}>
@@ -930,6 +876,7 @@ export default function AdminClients() {
                   <label>
                     Notes
                     <textarea
+                      readOnly
                       value={notesDraft}
                       onChange={(event) => setNotesDraft(event.target.value)}
                       rows={7}
@@ -937,14 +884,7 @@ export default function AdminClients() {
                     />
                   </label>
 
-                  <button
-                    className="button button-primary"
-                    type="button"
-                    onClick={saveClientProfile}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? "Saving..." : "Save Client Profile"}
-                  </button>
+                  <p>Legacy records are read-only here. Create a separate studio file and review associations above.</p>
                 </article>
               </div>
             </>
