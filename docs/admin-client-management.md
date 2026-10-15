@@ -164,3 +164,5 @@ audit history, reviewed association and duplicate review, then client portal pri
 The 390px mobile viewport had no horizontal page overflow and no browser runtime
 errors occurred. Browser tooling was temporary under `/tmp`; no dependency or lockfile
 changes were needed. The repository's emulator tests remain reproducible with npm.
+
+Phase 3: [synthetic migration rehearsal](migration-rehearsal.md), [read-only owner inventory](production-inventory-checklist.md), and [cutover/rollback gates](production-cutover-runbook.md). No production execution is included.
