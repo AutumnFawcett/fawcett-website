@@ -1,5 +1,7 @@
 # Coordinated privacy rollout and rollback runbook
 
+**Phase 4A decision:** retain `fawcett-website-sandbox` as production. `fawcett-website` is not a destination and remains untouched. Use the [in-place readiness plan](in-place-production-readiness.md), [owner checklist](production-inventory-checklist.md) and [adapter design](in-place-adapter-design.md). Cross-project instructions are deferred; no production operation is authorized.
+
 **Status: review-only plan. No production authorization, access or deployment has
 occurred.** This PR supplies an emulator rehearsal, not a production execution
 adapter. All operations below involving real infrastructure require new explicit
@@ -8,7 +10,7 @@ backup contents and credentials out of Codex/GitHub.
 
 ## Repository evidence and blockers
 
-The starting shared branch contains PR #32 (demo isolation), #33 (private originals
+The earlier Phase 3 baseline contains PR #32 (demo isolation), #33 (private originals
 and portal projections) and #34 (private studio files and audited associations).
 The checked-in policy denies client reads of original CRM records; the portal
 reads only own allowlisted projections. New studio records use a server-only API.
@@ -187,4 +189,4 @@ privileges. Studio account linking, legacy duplicate review/migration and correc
 reviewed associations remain separately controlled work. This phase establishes
 rehearsal evidence only, not production readiness signoff.
 
-Owner-confirmed cross-project direction: `fawcett-website-sandbox` → `fawcett-website`; development remains isolated. See the [cross-project approval plan](cross-project-production-plan.md) for Auth/password/session limits, destination collision policy, Storage mapping and additional gates. No live operation is authorized.
+Phase 4A applies the above sequence within the retained backend only: no Auth transfer, project rebinding, password migration or Storage move. Gate numbering in the [current readiness plan](in-place-production-readiness.md) is authoritative for the new approval record. Historic validations are not current production signoff.

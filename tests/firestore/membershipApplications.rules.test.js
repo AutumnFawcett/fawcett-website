@@ -15,7 +15,7 @@ const {
   updateDoc,
 } = require("firebase/firestore");
 
-const projectId = "demo-fawcett-membership-application-rules";
+const projectId = "demo-fawcett-dev";
 let testEnv;
 let sequence = 0;
 

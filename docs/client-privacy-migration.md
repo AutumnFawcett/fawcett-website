@@ -127,3 +127,5 @@ approval. These temporary empty portal states are an intentional cutover limitat
 not evidence that legacy records have been deleted.
 
 Phase 3 adds an [emulator-only approved rehearsal](migration-rehearsal.md), an [owner inventory checklist](production-inventory-checklist.md) and a [gated cutover/rollback runbook](production-cutover-runbook.md). These do not execute or authorize a production migration.
+
+Current production direction: [Phase 4A in-place readiness](in-place-production-readiness.md). Retain `fawcett-website-sandbox`, leave `fawcett-website` untouched, and use only `demo-fawcett-dev` emulators for development. No live operation is authorized.

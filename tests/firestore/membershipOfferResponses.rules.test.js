@@ -8,7 +8,7 @@ const {
 } = require("@firebase/rules-unit-testing");
 const { Timestamp, deleteDoc, doc, getDoc, setDoc, updateDoc } = require("firebase/firestore");
 
-const projectId = "demo-fawcett-membership-offer-response-rules";
+const projectId = "demo-fawcett-dev";
 let testEnv;
 
 function validResponse(clientUid = "client-one", applicationId = "application-one") {
