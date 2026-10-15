@@ -116,6 +116,7 @@ source-only legacy records remain private and absent until explicitly approved.
 | --- | --- |
 | Browser originals: clients, consultRequests, membershipApplications, conversations, messages, projects, appointments, payments, creditLedger, membershipOffers, membershipOfferResponses, membershipChangeRequests, projectTimeline | Rules fence, including active admins; no deletes of originals |
 | Browser portal projections, publication metadata, submission receipts | Rules fence, paired ownership/schema and fresh receipt epoch; cached source-only submissions rejected even when open |
+| `/api/admin/studio-payments` POST: private manual recording and hosted tattoo orders | Preflight plus transactional fence; provider transport rechecks; private requests/audit/reference locks fenced; GET remains admin-only |
 | `/api/admin/clients` POST: studio create/edit and reviewed consultation association | Preflight plus transactional fence; private audit/contact locks also fenced; GET reads remain available |
 | `/api/admin/conversations` POST: new conversations for first replies | Preflight plus transaction; enabled existing owner and same-owner links, fixed safe envelope, idempotent private creation receipt; no legacy backfill |
 | `/api/admin/messages` POST: all five reply workflows | Preflight plus transaction; reviewed conversation ownership, trusted sender, original/view/notification receipt and preview committed together |
