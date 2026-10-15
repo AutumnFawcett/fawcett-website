@@ -10,17 +10,8 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-} from "firebase/firestore";
+import { onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, doc, setDoc, updateDoc } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 function timestampToMillis(timestamp) {
@@ -81,6 +72,10 @@ export default function ClientMessages() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Never render the previous account's cached records during an Auth transition.
+      setConversations([]);
+      setMessages([]);
+
       setUser(currentUser);
       setAuthChecked(true);
 
@@ -103,6 +98,7 @@ export default function ClientMessages() {
     const unsubscribe = onSnapshot(
       conversationsQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextConversations = snapshot.docs.map((conversationDoc) => ({
           id: conversationDoc.id,
           ...conversationDoc.data(),
@@ -142,6 +138,7 @@ export default function ClientMessages() {
     const unsubscribe = onSnapshot(
       messagesQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextMessages = snapshot.docs
           .map((messageDoc) => ({
             id: messageDoc.id,

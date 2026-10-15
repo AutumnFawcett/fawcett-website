@@ -8,15 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, serverTimestamp } from "firebase/firestore";
+import { setDoc } from "@/lib/adminFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const clientStatusOptions = [

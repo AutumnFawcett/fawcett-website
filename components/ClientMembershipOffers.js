@@ -8,16 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-} from "firebase/firestore";
+import { onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, doc, updateDoc } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 function timestampToMillis(timestamp) {
@@ -174,6 +166,10 @@ export default function ClientMembershipOffers() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Never render the previous account's cached records during an Auth transition.
+      setApplications([]);
+      setResponses([]);
+
       setUser(currentUser);
       setAuthChecked(true);
 
@@ -201,6 +197,7 @@ export default function ClientMembershipOffers() {
     const unsubscribeApplications = onSnapshot(
       applicationsQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextApplications = snapshot.docs.map((applicationDoc) => ({
           id: applicationDoc.id,
           ...applicationDoc.data(),
@@ -218,6 +215,7 @@ export default function ClientMembershipOffers() {
     const unsubscribeResponses = onSnapshot(
       responsesQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextResponses = snapshot.docs.map((responseDoc) => ({
           id: responseDoc.id,
           ...responseDoc.data(),

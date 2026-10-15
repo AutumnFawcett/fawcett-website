@@ -8,16 +8,9 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, serverTimestamp } from "firebase/firestore";
+import { addDoc, updateDoc } from "@/lib/adminFirestore";
+import { PRIVATE_TIMELINE_TYPES } from "@/lib/portalProjection.mjs";
 import { auth, db } from "@/lib/firebaseClient";
 
 const timelineTypeOptions = [
@@ -30,7 +23,7 @@ const timelineTypeOptions = [
   { value: "client_update", label: "Client Update" },
   { value: "milestone", label: "Milestone" },
   { value: "reminder", label: "Reminder" },
-  { value: "health_skin_note", label: "Health / Skin Note" },
+  { value: "health_skin_note", label: "Health / Skin Note (always private)" },
   { value: "other", label: "Other" },
 ];
 
@@ -419,7 +412,7 @@ const router = useRouter();
     setSelectedStatusDraft(entry.status || "open");
     setSelectedTitleDraft(entry.title || "");
     setSelectedBodyDraft(entry.body || "");
-    setSelectedClientVisibleDraft(entry.clientVisible === true);
+    setSelectedClientVisibleDraft(entry.clientVisible === true && !PRIVATE_TIMELINE_TYPES.includes(entry.entryType));
     setSelectedImportantDraft(entry.important === true);
     setActionError("");
     setActionSuccess("");
@@ -475,7 +468,7 @@ const router = useRouter();
         title: entryTitle.trim(),
         body: entryBody.trim(),
 
-        clientVisible,
+        clientVisible: clientVisible && !PRIVATE_TIMELINE_TYPES.includes(entryType),
         important: importantFlag,
 
         createdBy: user.email || "",
@@ -514,7 +507,7 @@ const router = useRouter();
         status: selectedStatusDraft,
         title: selectedTitleDraft,
         body: selectedBodyDraft,
-        clientVisible: selectedClientVisibleDraft,
+        clientVisible: selectedClientVisibleDraft && !PRIVATE_TIMELINE_TYPES.includes(selectedEntry.entryType),
         important: selectedImportantDraft,
         updatedBy: user.email || "",
         updatedAt: serverTimestamp(),
@@ -853,7 +846,8 @@ const router = useRouter();
               <label className="checkbox-label timeline-checkbox">
                 <input
                   type="checkbox"
-                  checked={clientVisible}
+                  checked={clientVisible && !PRIVATE_TIMELINE_TYPES.includes(entryType)}
+                  disabled={PRIVATE_TIMELINE_TYPES.includes(entryType)}
                   onChange={(event) => setClientVisible(event.target.checked)}
                 />
                 Client visible
@@ -1022,7 +1016,8 @@ const router = useRouter();
                 <label className="checkbox-label timeline-checkbox">
                   <input
                     type="checkbox"
-                    checked={selectedClientVisibleDraft}
+                    checked={selectedClientVisibleDraft && !PRIVATE_TIMELINE_TYPES.includes(selectedEntry.entryType)}
+                  disabled={PRIVATE_TIMELINE_TYPES.includes(selectedEntry.entryType)}
                     onChange={(event) =>
                       setSelectedClientVisibleDraft(event.target.checked)
                     }

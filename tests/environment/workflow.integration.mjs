@@ -15,7 +15,7 @@ test("synthetic Auth, admin access and owned records work using the checked-in r
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   try {
     await signInWithEmailAndPassword(auth, "client@example.test", "Synthetic-only-123!");
-    for (const path of ["clients/synthetic-client", "consultRequests/synthetic-consult", "membershipApplications/synthetic-application", "messages/synthetic-message"]) {
+    for (const path of ["portalRecords/clients/records/synthetic-client", "portalRecords/consultRequests/records/synthetic-consult", "portalRecords/membershipApplications/records/synthetic-application", "portalRecords/messages/records/synthetic-message"]) {
       assert.equal((await getDoc(doc(db, path))).exists(), true);
     }
     await assert.rejects(setDoc(doc(db, "clients/other-client"), { clientUid: "other-client" }), { code: "permission-denied" });

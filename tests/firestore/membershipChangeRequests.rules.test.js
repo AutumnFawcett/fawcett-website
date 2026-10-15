@@ -114,10 +114,10 @@ test("invalid request type and initial status are denied", async () => {
   }));
 });
 
-test("client reads their own request but cannot update or delete it", async () => {
+test("client cannot read, update or delete the private original request", async () => {
   await seedRequest();
   const ref = requestRef("client-one");
-  await assertSucceeds(getDoc(ref));
+  await assertFails(getDoc(ref));
   await assertFails(updateDoc(ref, { reason: "Changed" }));
   await assertFails(deleteDoc(ref));
 });

@@ -8,16 +8,9 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, serverTimestamp } from "firebase/firestore";
+import { addDoc, updateDoc } from "@/lib/adminFirestore";
+import { PRIVATE_TIMELINE_TYPES } from "@/lib/portalProjection.mjs";
 import { auth, db } from "@/lib/firebaseClient";
 
 const projectStatusOptions = [
@@ -49,7 +42,7 @@ const timelineTypeOptions = [
   { value: "client_update", label: "Client Update" },
   { value: "milestone", label: "Milestone" },
   { value: "reminder", label: "Reminder" },
-  { value: "health_skin_note", label: "Health / Skin Note" },
+  { value: "health_skin_note", label: "Health / Skin Note (always private)" },
   { value: "other", label: "Other" },
 ];
 
@@ -468,7 +461,7 @@ export default function AdminProjects() {
         title: timelineTitle.trim(),
         body: timelineBody.trim(),
 
-        clientVisible: timelineClientVisible,
+        clientVisible: timelineClientVisible && !PRIVATE_TIMELINE_TYPES.includes(timelineType),
         important: timelineImportant,
 
         createdBy: user.email || "",
@@ -984,7 +977,8 @@ export default function AdminProjects() {
                     <label className="checkbox-label">
                       <input
                         type="checkbox"
-                        checked={timelineClientVisible}
+                        checked={timelineClientVisible && !PRIVATE_TIMELINE_TYPES.includes(timelineType)}
+                  disabled={PRIVATE_TIMELINE_TYPES.includes(timelineType)}
                         onChange={(event) =>
                           setTimelineClientVisible(event.target.checked)
                         }

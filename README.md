@@ -37,7 +37,7 @@ npm run test:firestore
 npm run test:integration
 ```
 
-`npm test` manages temporary emulators itself. Stop the development emulator process first to avoid occupied ports. A local build can complete without running emulators; functional Auth/Firestore checks require them. The checked-in Firestore rules are tested unchanged; Phase 0 does not fix the privacy findings from the audit.
+`npm test` manages temporary emulators itself. Stop the development emulator process first to avoid occupied ports. A local build can complete without running emulators; functional Auth/Firestore checks require them. The proposed Phase 1 Firestore rules are exercised only in emulators. See [client privacy and migration](docs/client-privacy-migration.md) for the new read boundary and the separately approved production cutover required. Existing real records remain subject to the live deployed policy.
 
 For a build smoke test, use `npm run start` after `npm run build`. Emulator browser endpoints assume the browser is on the same machine. A remote Codex browser would need approved forwarding of the emulator ports; do not point it at production to work around this.
 

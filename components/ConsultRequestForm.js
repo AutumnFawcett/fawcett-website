@@ -9,11 +9,8 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  serverTimestamp,
-} from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
+import { addDoc, collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const initialForm = {
@@ -90,9 +87,6 @@ Timeline:
 Timeline: ${formatValue(form.timeline)}
 Urgent: ${formatValue(form.isUrgent)}
 Availability: ${form.availability || "Not provided"}
-
-Health / Notes:
-${form.healthNotes || "Not provided"}
 
 Reference links:
 ${form.referenceLinks || "Not provided"}
@@ -673,6 +667,7 @@ export default function ConsultRequestForm() {
                 Health / Skin / Readiness Notes
                 <textarea
                   value={form.healthNotes}
+                  maxLength={2000}
                   onChange={(event) =>
                     updateField("healthNotes", event.target.value)
                   }

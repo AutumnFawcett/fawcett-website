@@ -4,14 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
+import { getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const portalCards = [
@@ -94,6 +88,14 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // Never render the previous account's cached records during an Auth transition.
+      setProjects([]);
+      setAppointments([]);
+      setPayments([]);
+      setOffers([]);
+
+      setClientProfile(null);
+      setIsLoading(true);
       setErrorMessage("");
 
       if (!currentUser) {
@@ -110,6 +112,7 @@ export default function ClientDashboard() {
         const clientRef = doc(db, "clients", currentUser.uid);
         const clientSnap = await getDoc(clientRef);
 
+        if (auth.currentUser?.uid !== currentUser.uid) return;
         if (clientSnap.exists()) {
           setClientProfile(clientSnap.data());
         }
@@ -142,6 +145,7 @@ export default function ClientDashboard() {
           )
         );
 
+        if (auth.currentUser?.uid !== currentUser.uid) return;
         setProjects(
           projectsSnap.docs.map((projectDoc) => ({
             id: projectDoc.id,
@@ -171,9 +175,9 @@ export default function ClientDashboard() {
         );
       } catch (error) {
         console.error(error);
-        setErrorMessage("Could not load your Tattoo Portal dashboard.");
+        if (auth.currentUser?.uid === currentUser.uid) setErrorMessage("Could not load your Tattoo Portal dashboard.");
       } finally {
-        setIsLoading(false);
+        if (auth.currentUser?.uid === currentUser.uid) setIsLoading(false);
       }
     });
 

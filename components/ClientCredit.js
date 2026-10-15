@@ -8,14 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  where,
-} from "firebase/firestore";
+import { onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 function timestampToMillis(timestamp) {
@@ -172,6 +166,9 @@ const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Never render the previous account's cached records during an Auth transition.
+      setPayments([]);
+
       setUser(currentUser);
       setAuthChecked(true);
 
@@ -194,6 +191,7 @@ const [loadError, setLoadError] = useState("");
     const unsubscribe = onSnapshot(
       paymentsQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextPayments = snapshot.docs.map((paymentDoc) => ({
           id: paymentDoc.id,
           ...paymentDoc.data(),
@@ -436,10 +434,6 @@ async function submitMembershipChangeRequest(event) {
 
                     {entry.appointmentTitle ? (
                       <p>Appointment: {entry.appointmentTitle}</p>
-                    ) : null}
-
-                    {entry.reference ? (
-                      <p>Reference: {entry.reference}</p>
                     ) : null}
                   </div>
 

@@ -8,7 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { onSnapshot, query, where } from "firebase/firestore";
+import { collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 function timestampToMillis(timestamp) {
@@ -206,6 +207,9 @@ export default function ClientAppointments() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Never render the previous account's cached records during an Auth transition.
+      setAppointments([]);
+
       setUser(currentUser);
       setAuthChecked(true);
 
@@ -228,6 +232,7 @@ export default function ClientAppointments() {
     const unsubscribe = onSnapshot(
       appointmentsQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextAppointments = snapshot.docs.map((appointmentDoc) => ({
           id: appointmentDoc.id,
           ...appointmentDoc.data(),
