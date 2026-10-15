@@ -118,9 +118,9 @@ test("all legitimate optional contact and detail fields may be populated or empt
   await assertSucceeds(setDoc(applicationRef("client-one"), empty));
 });
 
-test("client reads their own application but not another client's", async () => {
+test("original applications are private even to the submitting client", async () => {
   await seedApplication("owned");
-  await assertSucceeds(getDoc(applicationRef("client-one", "owned")));
+  await assertFails(getDoc(applicationRef("client-one", "owned")));
   await assertFails(getDoc(applicationRef("client-two", "owned")));
 });
 

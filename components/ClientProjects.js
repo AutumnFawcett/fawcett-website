@@ -8,7 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { onSnapshot, query, where } from "firebase/firestore";
+import { collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 function timestampToMillis(timestamp) {
@@ -287,6 +288,12 @@ export default function ClientProjects() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Never render the previous account's cached records during an Auth transition.
+      setProjects([]);
+      setAppointments([]);
+      setPayments([]);
+      setTimelineEntries([]);
+
       setUser(currentUser);
       setAuthChecked(true);
 
@@ -318,6 +325,7 @@ export default function ClientProjects() {
       const unsubscribe = onSnapshot(
         collectionQuery,
         (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
           const nextItems = snapshot.docs.map((itemDoc) => ({
             id: itemDoc.id,
             ...itemDoc.data(),
@@ -703,7 +711,7 @@ export default function ClientProjects() {
                 </h2>
 
                 <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-base font-semibold leading-8 text-white/72">
-                  {selectedProject.project?.tattooIdea ||
+                  {selectedProject.clientProjectSummary || selectedProject.project?.tattooIdea ||
                     selectedProject.project?.idea ||
                     "No project description provided yet."}
                 </div>

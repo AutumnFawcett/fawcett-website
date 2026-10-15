@@ -9,11 +9,8 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  serverTimestamp,
-} from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
+import { addDoc, collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const initialForm = {

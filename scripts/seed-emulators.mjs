@@ -4,6 +4,8 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { pathToFileURL } from "node:url";
 import { serverFirebaseEnvironment, DEMO_PROJECT_ID } from "../lib/firebaseEnvironment.mjs";
 
+import { PORTAL_FIELDS, portalProjection } from "../lib/portalProjection.mjs";
+
 export async function seedEmulators() {
   const environment = serverFirebaseEnvironment(process.env);
   if (environment.mode !== "emulator") throw new Error("Seeding is emulator-only");
@@ -33,7 +35,14 @@ export async function seedEmulators() {
       "messages/synthetic-message": { clientUid: identity.clientUid, conversationId: "synthetic-conversation", consultRequestId: "synthetic-consult", senderUid: identity.clientUid, senderRole: "client", senderName: identity.clientName, body: "Synthetic message for local testing only", createdAt: now },
     };
     const batch = db.batch();
-    for (const [path, value] of Object.entries(records)) batch.set(db.doc(path), value);
+    for (const [path, value] of Object.entries(records)) {
+      batch.set(db.doc(path), value);
+      const [name, id] = path.split("/");
+      if (PORTAL_FIELDS[name]) {
+        const projection = portalProjection(name, value);
+        if (projection) batch.set(db.doc(`portalRecords/${name}/records/${id}`), projection);
+      }
+    }
     await batch.commit();
     return Object.keys(records);
   } finally { await deleteApp(app); }

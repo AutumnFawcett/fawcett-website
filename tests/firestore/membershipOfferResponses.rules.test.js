@@ -146,10 +146,10 @@ test("invalid field types are denied", async () => {
   }
 });
 
-test("client reads their response but cannot update or delete it", async () => {
+test("client cannot read, update or delete the private original response", async () => {
   await seedResponse();
   const ref = responseRef("client-one");
-  await assertSucceeds(getDoc(ref));
+  await assertFails(getDoc(ref));
   await assertFails(updateDoc(ref, { clientNote: "Changed" }));
   await assertFails(deleteDoc(ref));
 });

@@ -193,6 +193,8 @@ service cloud.firestore {
 
     function createsOwnClientProfile(clientId) {
       return signedIn()
+        && scalarPortalFields("clients", request.resource.data)
+        && (!("source" in request.resource.data) || request.resource.data.source is string)
         && request.auth.uid == clientId
         && request.resource.data.clientUid == request.auth.uid
         && request.resource.data.keys().hasOnly([
@@ -208,17 +210,65 @@ service cloud.firestore {
         ]);
     }
 
+    function ownLinkedRecord(data, field, collectionName) {
+      let id = data.get(field, null);
+      return id == null || (id is string
+        && existsAfter(/databases/$(database)/documents/$(collectionName)/$(id))
+        && getAfter(/databases/$(database)/documents/$(collectionName)/$(id)).data.clientUid == data.clientUid);
+    }
+
+    function validClientLinks(data) {
+      return ownLinkedRecord(data, "applicationId", "membershipApplications")
+        && ownLinkedRecord(data, "consultRequestId", "consultRequests")
+        && ownLinkedRecord(data, "membershipChangeRequestId", "membershipChangeRequests")
+        && ownLinkedRecord(data, "membershipOfferResponseId", "membershipOfferResponses");
+    }
+
+    function createsOwnConsult() {
+      let data = request.resource.data;
+      return createsOwnRecord() && scalarPortalFields("consultRequests", data)
+        && (!("request" in data) || portalMapRequest(data, data, true))
+        && (!("coverUp" in data) || portalMapCoverUp(data, data, true))
+        && (!("timeline" in data) || portalMapTimeline(data, data, true))
+        && (!("acknowledgements" in data) || portalMapAcknowledgements(data, data, true))
+        && data.keys().hasOnly(["clientUid", "clientName", "clientEmail", "phone", "instagram", "preferredContactMethod", "preferredArtist", "assignedInbox", "assignedArtistId", "status", "request", "coverUp", "timeline", "readiness", "acknowledgements", "createdAt", "updatedAt"])
+        && data.status == "new"
+        && data.readiness is map
+        && data.readiness.keys().hasOnly(["healthNotes"])
+        && data.readiness.healthNotes is string && data.readiness.healthNotes.size() <= 2000
+        && data.createdAt == request.time && data.updatedAt == request.time;
+    }
+
+    function createsOwnConversation() {
+      let data = request.resource.data;
+      return createsOwnRecord() && validClientLinks(data) && scalarPortalFields("conversations", data)
+        && data.keys().hasOnly(["clientUid", "clientName", "clientEmail", "applicationId", "consultRequestId", "membershipChangeRequestId", "membershipOfferResponseId", "sourceType", "sourceId", "assignedInbox", "assignedArtistId", "status", "subject", "lastMessagePreview", "lastMessageAt", "unreadForAdmin", "unreadForClient", "createdAt", "updatedAt"])
+        && data.createdAt == request.time && data.updatedAt == request.time;
+    }
+
     function createsOwnMessage() {
-      return signedIn()
-        && request.resource.data.clientUid == request.auth.uid
-        && request.resource.data.senderUid == request.auth.uid
-        && request.resource.data.senderRole == "client";
+      let data = request.resource.data;
+      let conversation = /databases/$(database)/documents/conversations/$(data.conversationId);
+      return signedIn() && data.clientUid == request.auth.uid && scalarPortalFields("messages", data)
+        && data.senderUid == request.auth.uid && data.senderRole == "client"
+        && data.body is string && data.body.size() > 0 && data.body.size() <= 10000
+        && data.createdAt == request.time
+        && data.keys().hasOnly(["clientUid", "clientEmail", "conversationId", "applicationId", "consultRequestId", "membershipChangeRequestId", "membershipOfferResponseId", "sourceType", "sourceId", "senderUid", "senderRole", "senderName", "body", "createdAt"])
+        && existsAfter(conversation)
+        && getAfter(conversation).data.clientUid == request.auth.uid
+        && data.get("applicationId", null) == getAfter(conversation).data.get("applicationId", null)
+        && data.get("consultRequestId", null) == getAfter(conversation).data.get("consultRequestId", null)
+        && validClientLinks(data);
     }
 
     function clientUpdatesOwnConversation() {
       return signedIn()
         && resource.data.clientUid == request.auth.uid
         && request.resource.data.clientUid == resource.data.clientUid
+        && request.resource.data.get("lastMessagePreview", "") is string
+        && request.resource.data.get("lastMessagePreview", "").size() <= 180
+        && request.resource.data.get("unreadForAdmin", true) is bool
+        && request.resource.data.get("unreadForClient", false) is bool
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           "lastMessagePreview",
           "lastMessageAt",
@@ -243,56 +293,57 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow create: if isAdmin() || createsOwnClientProfile(clientId);
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == clientId);
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /membershipApplications/{applicationId} {
       allow create: if createsValidMembershipApplication();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /consultRequests/{consultRequestId} {
-      allow create: if createsOwnRecord();
-      allow read: if isAdmin() || ownsRecord();
+      allow create: if createsOwnConsult();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /conversations/{conversationId} {
-      allow create: if isAdmin() || createsOwnRecord();
-      allow read: if isAdmin() || ownsRecord();
+      allow create: if isAdmin() || createsOwnConversation();
+      allow read: if isAdmin();
       allow update: if isAdmin() || clientUpdatesOwnConversation();
       allow delete: if false;
     }
 
     match /messages/{messageId} {
       allow create: if isAdmin() || createsOwnMessage();
-      allow read: if isAdmin() || ownsRecord();
-      allow update: if false;
+      allow read: if isAdmin();
+      // Preserve message text/sender/history while allowing private admin review.
+      allow update: if isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["adminReview", "status", "assignedInbox", "assignedArtistId", "unreadForAdmin", "updatedAt"]);
       allow delete: if false;
     }
 
     match /projects/{projectId} {
       allow create: if isAdmin();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /appointments/{appointmentId} {
       allow create: if isAdmin();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /payments/{paymentId} {
       allow create: if isAdmin();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -321,43 +372,267 @@ service cloud.firestore {
     }
 
     match /founderProfiles/{profileId} {
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow create, update, delete: if false;
     }
 
     match /membershipOffers/{offerId} {
       allow create: if isAdmin();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /membershipOfferResponses/{responseId} {
       allow create: if createsValidMembershipOfferResponse();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /membershipChangeRequests/{requestId} {
       allow create: if createsValidMembershipChangeRequest();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /projectTimeline/{entryId} {
       allow create: if isAdmin();
-      allow read: if isAdmin() || (ownsRecord() && resource.data.clientVisible == true);
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
     }
 
     match /creditLedger/{entryId} {
       allow create: if isAdmin();
-      allow read: if isAdmin() || ownsRecord();
+      allow read: if isAdmin();
       allow update: if isAdmin();
       allow delete: if false;
+    }
+    // Portal documents are explicit projections. Source IDs and Auth UIDs stay
+    // unchanged; original collections above are private, including legacy data.
+    function portalKeys(collectionName) {
+      return collectionName == "clients" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","status","source","preferredArtist"] :
+        collectionName == "consultRequests" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","preferredContactMethod","preferredArtist","assignedInbox","assignedArtistId","status","request","coverUp","timeline","acknowledgements","projectId","conversationId"] :
+        collectionName == "membershipApplications" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","programName","applicationType","preferredContactMethod","preferredArtist","assignedInbox","assignedArtistId","status","project","coverUp","budget","timeline","acknowledgements","membershipOffer","projectId","conversationId"] :
+        collectionName == "conversations" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","applicationId","consultRequestId","membershipChangeRequestId","membershipOfferResponseId","sourceType","sourceId","assignedInbox","assignedArtistId","status","subject","lastMessagePreview","lastMessageAt","unreadForAdmin","unreadForClient"] :
+        collectionName == "messages" ? ["clientUid","clientEmail","conversationId","applicationId","consultRequestId","membershipChangeRequestId","membershipOfferResponseId","sourceType","sourceId","senderRole","senderName","body","createdAt"] :
+        collectionName == "projects" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","consultRequestId","applicationId","projectName","status","assignedInbox","assignedArtistId","preferredArtist","source","membership","project","coverUp","timeline","estimate","mandatoryCosts","clientProjectSummary"] :
+        collectionName == "appointments" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","projectId","projectName","title","appointmentType","type","status","startAt","endAt","durationMinutes","assignedInbox","assignedArtistId","location","clientVisibleNotes"] :
+        collectionName == "payments" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","projectId","projectName","appointmentId","appointmentTitle","paymentType","paymentMethod","creditHandling","status","amountCents","amountDisplay","currency","receivedAt","amount","paymentAmount","type"] :
+        collectionName == "creditLedger" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","projectId","projectName","paymentId","appointmentId","entryType","transactionType","status","deltaCents","amountCents","currency","description","title","reason","receivedAt"] :
+        collectionName == "membershipOffers" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","applicationId","projectId","tier","tierLabel","status","initialPaymentCents","monthlyPaymentCents","minimumProjectValueCents","paymentStartDate","termsSummary","clientMessage","offerStatus","sentAt"] :
+        collectionName == "membershipOfferResponses" ? ["clientUid","applicationId","responseType","responseStatus","clientNote","createdAt","updatedAt"] :
+        collectionName == "membershipChangeRequests" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","requestType","requestStatus","reason","clientAcknowledgement"] :
+        collectionName == "projectTimeline" ? ["clientUid","clientName","clientEmail","phone","instagram","createdAt","updatedAt","projectId","projectName","entryType","status","title","body","clientVisible","important"] : [];
+    }
+
+    function scalarPortalFields(collectionName, data) {
+      return collectionName == "clients" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("status" in data) || data.status is string) && (!("preferredArtist" in data) || data.preferredArtist is string)) :
+        collectionName == "consultRequests" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("preferredContactMethod" in data) || data.preferredContactMethod is string) && (!("preferredArtist" in data) || data.preferredArtist is string) && (!("assignedInbox" in data) || data.assignedInbox is string) && (!("status" in data) || data.status is string) && (!("projectId" in data) || (data.projectId == null || data.projectId is string)) && (!("conversationId" in data) || (data.conversationId == null || data.conversationId is string))) :
+        collectionName == "membershipApplications" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("programName" in data) || data.programName is string) && (!("applicationType" in data) || data.applicationType is string) && (!("preferredContactMethod" in data) || data.preferredContactMethod is string) && (!("preferredArtist" in data) || data.preferredArtist is string) && (!("assignedInbox" in data) || data.assignedInbox is string) && (!("status" in data) || data.status is string) && (!("projectId" in data) || (data.projectId == null || data.projectId is string)) && (!("conversationId" in data) || (data.conversationId == null || data.conversationId is string))) :
+        collectionName == "conversations" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("applicationId" in data) || (data.applicationId == null || data.applicationId is string)) && (!("consultRequestId" in data) || (data.consultRequestId == null || data.consultRequestId is string)) && (!("membershipChangeRequestId" in data) || (data.membershipChangeRequestId == null || data.membershipChangeRequestId is string)) && (!("membershipOfferResponseId" in data) || (data.membershipOfferResponseId == null || data.membershipOfferResponseId is string)) && (!("sourceType" in data) || data.sourceType is string) && (!("sourceId" in data) || (data.sourceId == null || data.sourceId is string)) && (!("assignedInbox" in data) || data.assignedInbox is string) && (!("status" in data) || data.status is string) && (!("subject" in data) || data.subject is string) && (!("lastMessagePreview" in data) || data.lastMessagePreview is string) && (!("lastMessageAt" in data) || (data.lastMessageAt == null || data.lastMessageAt is timestamp)) && (!("unreadForAdmin" in data) || data.unreadForAdmin is bool) && (!("unreadForClient" in data) || data.unreadForClient is bool)) :
+        collectionName == "messages" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("conversationId" in data) || (data.conversationId == null || data.conversationId is string)) && (!("applicationId" in data) || (data.applicationId == null || data.applicationId is string)) && (!("consultRequestId" in data) || (data.consultRequestId == null || data.consultRequestId is string)) && (!("membershipChangeRequestId" in data) || (data.membershipChangeRequestId == null || data.membershipChangeRequestId is string)) && (!("membershipOfferResponseId" in data) || (data.membershipOfferResponseId == null || data.membershipOfferResponseId is string)) && (!("sourceType" in data) || data.sourceType is string) && (!("sourceId" in data) || (data.sourceId == null || data.sourceId is string)) && (!("senderRole" in data) || data.senderRole is string) && (!("senderName" in data) || data.senderName is string) && (!("body" in data) || data.body is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp))) :
+        collectionName == "projects" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("consultRequestId" in data) || (data.consultRequestId == null || data.consultRequestId is string)) && (!("applicationId" in data) || (data.applicationId == null || data.applicationId is string)) && (!("projectName" in data) || data.projectName is string) && (!("status" in data) || data.status is string) && (!("assignedInbox" in data) || data.assignedInbox is string) && (!("preferredArtist" in data) || data.preferredArtist is string) && (!("clientProjectSummary" in data) || data.clientProjectSummary is string)) :
+        collectionName == "appointments" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("projectId" in data) || (data.projectId == null || data.projectId is string)) && (!("projectName" in data) || data.projectName is string) && (!("title" in data) || data.title is string) && (!("appointmentType" in data) || data.appointmentType is string) && (!("type" in data) || data.type is string) && (!("status" in data) || data.status is string) && (!("startAt" in data) || (data.startAt == null || data.startAt is timestamp)) && (!("endAt" in data) || (data.endAt == null || data.endAt is timestamp)) && (!("durationMinutes" in data) || (data.durationMinutes == null || data.durationMinutes is number)) && (!("assignedInbox" in data) || data.assignedInbox is string) && (!("location" in data) || data.location is string) && (!("clientVisibleNotes" in data) || data.clientVisibleNotes is string)) :
+        collectionName == "payments" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("projectId" in data) || (data.projectId == null || data.projectId is string)) && (!("projectName" in data) || data.projectName is string) && (!("appointmentId" in data) || (data.appointmentId == null || data.appointmentId is string)) && (!("appointmentTitle" in data) || data.appointmentTitle is string) && (!("paymentType" in data) || data.paymentType is string) && (!("paymentMethod" in data) || data.paymentMethod is string) && (!("creditHandling" in data) || data.creditHandling is string) && (!("status" in data) || data.status is string) && (!("amountCents" in data) || (data.amountCents == null || data.amountCents is number)) && (!("amountDisplay" in data) || data.amountDisplay is string) && (!("currency" in data) || data.currency is string) && (!("receivedAt" in data) || (data.receivedAt == null || data.receivedAt is timestamp)) && (!("amount" in data) || (data.amount == null || data.amount is number || data.amount is string)) && (!("paymentAmount" in data) || (data.paymentAmount == null || data.paymentAmount is number || data.paymentAmount is string)) && (!("type" in data) || data.type is string)) :
+        collectionName == "creditLedger" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("projectId" in data) || (data.projectId == null || data.projectId is string)) && (!("projectName" in data) || data.projectName is string) && (!("paymentId" in data) || (data.paymentId == null || data.paymentId is string)) && (!("appointmentId" in data) || (data.appointmentId == null || data.appointmentId is string)) && (!("entryType" in data) || data.entryType is string) && (!("transactionType" in data) || data.transactionType is string) && (!("status" in data) || data.status is string) && (!("deltaCents" in data) || (data.deltaCents == null || data.deltaCents is number)) && (!("amountCents" in data) || (data.amountCents == null || data.amountCents is number)) && (!("currency" in data) || data.currency is string) && (!("description" in data) || data.description is string) && (!("title" in data) || data.title is string) && (!("reason" in data) || data.reason is string) && (!("receivedAt" in data) || (data.receivedAt == null || data.receivedAt is timestamp))) :
+        collectionName == "membershipOffers" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("applicationId" in data) || (data.applicationId == null || data.applicationId is string)) && (!("projectId" in data) || (data.projectId == null || data.projectId is string)) && (!("tier" in data) || data.tier is string) && (!("tierLabel" in data) || data.tierLabel is string) && (!("status" in data) || data.status is string) && (!("initialPaymentCents" in data) || (data.initialPaymentCents == null || data.initialPaymentCents is number)) && (!("monthlyPaymentCents" in data) || (data.monthlyPaymentCents == null || data.monthlyPaymentCents is number)) && (!("minimumProjectValueCents" in data) || (data.minimumProjectValueCents == null || data.minimumProjectValueCents is number)) && (!("paymentStartDate" in data) || data.paymentStartDate is string) && (!("termsSummary" in data) || data.termsSummary is string) && (!("clientMessage" in data) || data.clientMessage is string) && (!("offerStatus" in data) || data.offerStatus is string) && (!("sentAt" in data) || (data.sentAt == null || data.sentAt is timestamp))) :
+        collectionName == "membershipOfferResponses" ? ((!("clientUid" in data) || data.clientUid is string) && (!("applicationId" in data) || (data.applicationId == null || data.applicationId is string)) && (!("responseType" in data) || data.responseType is string) && (!("responseStatus" in data) || data.responseStatus is string) && (!("clientNote" in data) || data.clientNote is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp))) :
+        collectionName == "membershipChangeRequests" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("requestType" in data) || data.requestType is string) && (!("requestStatus" in data) || data.requestStatus is string) && (!("reason" in data) || data.reason is string)) :
+        collectionName == "projectTimeline" ? ((!("clientUid" in data) || data.clientUid is string) && (!("clientName" in data) || data.clientName is string) && (!("clientEmail" in data) || data.clientEmail is string) && (!("phone" in data) || data.phone is string) && (!("instagram" in data) || data.instagram is string) && (!("createdAt" in data) || (data.createdAt == null || data.createdAt is timestamp)) && (!("updatedAt" in data) || (data.updatedAt == null || data.updatedAt is timestamp)) && (!("projectId" in data) || (data.projectId == null || data.projectId is string)) && (!("projectName" in data) || data.projectName is string) && (!("entryType" in data) || data.entryType is string) && (!("status" in data) || data.status is string) && (!("title" in data) || data.title is string) && (!("body" in data) || data.body is string) && (!("clientVisible" in data) || data.clientVisible is bool) && (!("important" in data) || data.important is bool)) : false;
+    }
+    function portalMapSource(data, source, enforceTypes) {
+      let publicMap = data.source;
+      let privateMap = source.source;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["sourceType","sourceId"])
+        && (!enforceTypes || publicMap.values().join("") is string);
+    }
+
+    function portalMapProject(data, source, enforceTypes) {
+      let publicMap = data.project;
+      let privateMap = source.project;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["projectType","tattooIdea","idea","colourPreference","placement","bodySide","sizeCategory","detailLevel","budgetRange","referenceLinks"])
+        && (!enforceTypes || publicMap.values().join("") is string);
+    }
+
+    function portalMapRequest(data, source, enforceTypes) {
+      let publicMap = data.request;
+      let privateMap = source.request;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["projectType","tattooIdea","placement","bodySide","approximateSize","colourPreference","styleDirection","budgetRange","availability","referenceLinks"])
+        && (!enforceTypes || publicMap.values().join("") is string);
+    }
+
+    function portalMapCoverUp(data, source, enforceTypes) {
+      let publicMap = data.coverUp;
+      let privateMap = source.coverUp;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["isCoverUp","coverUpDescription"])
+        && (!enforceTypes || publicMap.values().join("") is string);
+    }
+
+    function portalMapBudget(data, source, enforceTypes) {
+      let publicMap = data.budget;
+      let privateMap = source.budget;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["tierInterest","monthlyComfort","paymentStyle"])
+        && (!enforceTypes || publicMap.values().join("") is string);
+    }
+
+    function portalMapTimeline(data, source, enforceTypes) {
+      let publicMap = data.timeline;
+      let privateMap = source.timeline;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["timeline","isUrgent","planningTimeline","completionWindow","availability"])
+        && (!enforceTypes || publicMap.values().join("") is string);
+    }
+
+    function portalMapAcknowledgements(data, source, enforceTypes) {
+      let publicMap = data.acknowledgements;
+      let privateMap = source.acknowledgements;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["applicationOnly","noPaymentCollected","noGuarantee","notInvestmentLoanDiscount","mandatoryCostsBeforeEnrollment","termsBeforeEnrollment","studioPolicy","informationAccurate","contactPermission","acknowledgementAccurate","acknowledgementNoGuarantee","acknowledgementPolicy"])
+        && (!enforceTypes || publicMap.values().hasOnly([true, false]));
+    }
+
+    function portalMapClientAcknowledgement(data, source, enforceTypes) {
+      let publicMap = data.clientAcknowledgement;
+      let privateMap = source.clientAcknowledgement;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["understandsThisIsARequest","understandsStudioMustReview","understandsCreditBalanceDoesNotAutomaticallyDisappear"])
+        && (!enforceTypes || publicMap.values().hasOnly([true, false]));
+    }
+
+    function portalMapMembership(data, source, enforceTypes) {
+      let publicMap = data.membership;
+      let privateMap = source.membership;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["tierInterest","monthlyComfort","paymentStyle","membershipStatus"])
+        && (!enforceTypes || publicMap.values().join("") is string);
+    }
+
+    function portalMapEstimate(data, source, enforceTypes) {
+      let publicMap = data.estimate;
+      let privateMap = source.estimate;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["estimateLowCents","estimateHighCents","estimatedSessions","estimatedHours","hourlyRateCents","updatedAt"])
+        && (!enforceTypes || ((!("estimateLowCents" in publicMap) || (publicMap.estimateLowCents == null || publicMap.estimateLowCents is number)) && (!("estimateHighCents" in publicMap) || (publicMap.estimateHighCents == null || publicMap.estimateHighCents is number)) && (!("estimatedSessions" in publicMap) || (publicMap.estimatedSessions == null || publicMap.estimatedSessions is number || publicMap.estimatedSessions is string)) && (!("estimatedHours" in publicMap) || (publicMap.estimatedHours == null || publicMap.estimatedHours is number || publicMap.estimatedHours is string)) && (!("hourlyRateCents" in publicMap) || (publicMap.hourlyRateCents == null || publicMap.hourlyRateCents is number)) && (!("updatedAt" in publicMap) || (publicMap.updatedAt == null || publicMap.updatedAt is timestamp))));
+    }
+
+    function portalMapMandatoryCosts(data, source, enforceTypes) {
+      let publicMap = data.mandatoryCosts;
+      let privateMap = source.mandatoryCosts;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["tattooTimeDisclosed","suppliesDisclosed","gstDisclosed","depositDisclosed","bookingFeeDisclosed","drawingFeeDisclosed","processingFeeDisclosed","otherCostsDisclosed"])
+        && (!enforceTypes || publicMap.values().hasOnly([true, false]));
+    }
+
+    function portalMapMembershipOffer(data, source, enforceTypes) {
+      let publicMap = data.membershipOffer;
+      let privateMap = source.membershipOffer;
+      return publicMap is map && privateMap is map
+        && publicMap.keys().hasOnly(["tier","tierLabel","initialPaymentDollars","monthlyPaymentDollars","minimumProjectValueDollars","initialPaymentCents","monthlyPaymentCents","minimumProjectValueCents","paymentStartDate","termsSummary","clientMessage","offerStatus","sentAt","updatedAt"])
+        && (!enforceTypes || ((!("tier" in publicMap) || publicMap.tier is string) && (!("tierLabel" in publicMap) || publicMap.tierLabel is string) && (!("initialPaymentDollars" in publicMap) || (publicMap.initialPaymentDollars == null || publicMap.initialPaymentDollars is number || publicMap.initialPaymentDollars is string)) && (!("monthlyPaymentDollars" in publicMap) || (publicMap.monthlyPaymentDollars == null || publicMap.monthlyPaymentDollars is number || publicMap.monthlyPaymentDollars is string)) && (!("minimumProjectValueDollars" in publicMap) || (publicMap.minimumProjectValueDollars == null || publicMap.minimumProjectValueDollars is number || publicMap.minimumProjectValueDollars is string)) && (!("initialPaymentCents" in publicMap) || (publicMap.initialPaymentCents == null || publicMap.initialPaymentCents is number)) && (!("monthlyPaymentCents" in publicMap) || (publicMap.monthlyPaymentCents == null || publicMap.monthlyPaymentCents is number)) && (!("minimumProjectValueCents" in publicMap) || (publicMap.minimumProjectValueCents == null || publicMap.minimumProjectValueCents is number)) && (!("paymentStartDate" in publicMap) || publicMap.paymentStartDate is string) && (!("termsSummary" in publicMap) || publicMap.termsSummary is string) && (!("clientMessage" in publicMap) || publicMap.clientMessage is string) && (!("offerStatus" in publicMap) || publicMap.offerStatus is string) && (!("sentAt" in publicMap) || (publicMap.sentAt == null || publicMap.sentAt is timestamp)) && (!("updatedAt" in publicMap) || (publicMap.updatedAt == null || publicMap.updatedAt is timestamp))));
+    }
+
+    // These are the public artist catalog aliases already used by the forms,
+    // never Firebase Auth/staff UIDs or email addresses.
+    function publicArtistReference(data) {
+      return !("assignedArtistId" in data)
+        || data.assignedArtistId in [null, "artist_ben", "artist_autumn", "ben", "autumn"];
+    }
+
+    function samePortalLinks(data, source) {
+      return (!("projectId" in data) || data.projectId == source.get("projectId", null))
+        && (!("applicationId" in data) || data.applicationId == source.get("applicationId", null))
+        && (!("consultRequestId" in data) || data.consultRequestId == source.get("consultRequestId", null))
+        && (!("appointmentId" in data) || data.appointmentId == source.get("appointmentId", null))
+        && (!("conversationId" in data) || data.conversationId == source.get("conversationId", null))
+        && (!("membershipChangeRequestId" in data) || data.membershipChangeRequestId == source.get("membershipChangeRequestId", null))
+        && (!("membershipOfferResponseId" in data) || data.membershipOfferResponseId == source.get("membershipOfferResponseId", null));
+    }
+
+    function validPortalProjection(collectionName, data, source, enforceTypes) {
+      return collectionName in ["clients","consultRequests","membershipApplications","conversations","messages","projects","appointments","payments","creditLedger","membershipOffers","membershipOfferResponses","membershipChangeRequests","projectTimeline"]
+        && data.clientUid is string && data.clientUid == source.clientUid
+        && data.keys().hasOnly(portalKeys(collectionName))
+        && publicArtistReference(data)
+        && scalarPortalFields(collectionName, data)
+        && (collectionName != "clients" || !("source" in data) || data.source is string)
+        && samePortalLinks(data, source)
+        && (!("source" in data) || (collectionName == "clients" ? data.source == source.source : (portalMapSource(data, source, enforceTypes) && data.source == source.source)))
+        && (!("project" in data) || portalMapProject(data, source, enforceTypes))
+        && (!("request" in data) || portalMapRequest(data, source, enforceTypes))
+        && (!("coverUp" in data) || portalMapCoverUp(data, source, enforceTypes))
+        && (!("budget" in data) || portalMapBudget(data, source, enforceTypes))
+        && (!("timeline" in data) || portalMapTimeline(data, source, enforceTypes))
+        && (!("acknowledgements" in data) || portalMapAcknowledgements(data, source, enforceTypes))
+        && (!("clientAcknowledgement" in data) || portalMapClientAcknowledgement(data, source, enforceTypes))
+        && (!("membership" in data) || portalMapMembership(data, source, enforceTypes))
+        && (!("estimate" in data) || portalMapEstimate(data, source, enforceTypes))
+        && (!("mandatoryCosts" in data) || portalMapMandatoryCosts(data, source, enforceTypes))
+        && (collectionName != "membershipOffers" || data.get("offerStatus", data.get("status", "")) in ["membership_offer_sent","client_reviewing_offer","membership_approved","membership_active","membership_paused","membership_cancelled","accepted","declined"])
+        && (!("membershipOffer" in data) || portalMapMembershipOffer(data, source, enforceTypes))
+        && (!("clientProjectSummary" in data) || (collectionName == "projects"
+          && data.clientProjectSummary is string
+          && data.clientProjectSummary == source.get("adminReview", {}).get("clientProjectSummary", source.get("clientProjectSummary", ""))))
+        && (collectionName != "membershipOffers" || data.get("offerStatus", data.get("status", "")) in ["membership_offer_sent","client_reviewing_offer","membership_approved","membership_active","membership_paused","membership_cancelled","accepted","declined"])
+        && (!("membershipOffer" in data) || data.membershipOffer.offerStatus in ["membership_offer_sent","client_reviewing_offer","membership_approved","membership_active","membership_paused","membership_cancelled","accepted","declined"])
+        && (collectionName != "projectTimeline" || (data.clientVisible == true && !(data.entryType in ["health_skin_note","internal_note","admin_note"])));
+    }
+
+    // Client source schemas validate submitted values once. Clients may only
+    // mirror a newly created own record or change own conversation read state.
+    // Whole nested maps must match, so they cannot copy private review/health.
+    function validClientPortalProjection(collectionName, data, source) {
+      let difference = data.diff(source);
+      return data.clientUid == request.auth.uid && data.clientUid == source.clientUid
+        && data.keys().hasOnly(portalKeys(collectionName))
+        && publicArtistReference(data)
+        && difference.addedKeys().size() == 0
+        && difference.changedKeys().size() == 0;
+    }
+
+    match /portalRecords/{sourceCollection}/records/{recordId} {
+      function sourcePath() {
+        return /databases/$(database)/documents/$(sourceCollection)/$(recordId);
+      }
+      function validProjection() {
+        let path = sourcePath();
+        let source = getAfter(path).data;
+        let data = request.resource.data;
+        return existsAfter(path)
+          && (isAdmin()
+            ? validPortalProjection(sourceCollection, data, source, true)
+            : validClientPortalProjection(sourceCollection, data, source));
+      }
+      function createsClientProjection() {
+        return signedIn()
+          && sourceCollection in ["clients", "consultRequests", "membershipApplications", "conversations", "messages", "membershipOfferResponses", "membershipChangeRequests"]
+          && request.resource.data.clientUid == request.auth.uid
+          && !exists(sourcePath()) && validProjection();
+      }
+      function updatesClientConversation() {
+        return signedIn() && sourceCollection == "conversations"
+          && resource.data.clientUid == request.auth.uid
+          && request.resource.data.clientUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastMessagePreview", "lastMessageAt", "unreadForAdmin", "unreadForClient", "updatedAt"])
+          && validProjection();
+      }
+      allow get: if signedIn() && sourceCollection == "clients" && recordId == request.auth.uid
+        && !exists(/databases/$(database)/documents/portalRecords/$(sourceCollection)/records/$(recordId));
+      allow read: if isAdmin() || (signedIn()
+        && sourceCollection in ["clients","consultRequests","membershipApplications","conversations","messages","projects","appointments","payments","creditLedger","membershipOffers","membershipOfferResponses","membershipChangeRequests","projectTimeline"]
+        && resource.data.clientUid == request.auth.uid
+        && (sourceCollection != "projectTimeline" || resource.data.clientVisible == true));
+      allow create: if (isAdmin() && validProjection()) || createsClientProjection();
+      allow update: if (isAdmin() && validProjection()) || updatesClientConversation();
+      // Only derived views may be withdrawn; original history cannot be deleted.
+      allow delete: if isAdmin();
     }
   }
 }

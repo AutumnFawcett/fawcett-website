@@ -9,7 +9,8 @@ import {
   signOut,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc as adminDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 export default function TattooPortalLogin() {
@@ -37,7 +38,7 @@ export default function TattooPortalLogin() {
   }
 
   async function checkAdminAccess(user) {
-    const adminRef = doc(db, "adminUsers", user.uid);
+    const adminRef = adminDoc(db, "adminUsers", user.uid);
     const adminSnap = await getDoc(adminRef);
 
     return adminSnap.exists() && adminSnap.data().active === true;

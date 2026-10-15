@@ -8,17 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-} from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, updateDoc } from "@/lib/adminFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const inboxes = [

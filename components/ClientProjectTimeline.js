@@ -8,12 +8,8 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "firebase/auth";
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
+import { onSnapshot, query, where } from "firebase/firestore";
+import { collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const timelineTypeLabels = {
@@ -160,6 +156,10 @@ export default function ClientProjectTimeline() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      // Never render the previous account's cached records during an Auth transition.
+      setTimelineEntries([]);
+      setProjects([]);
+
       setUser(currentUser);
       setAuthChecked(true);
 
@@ -188,6 +188,7 @@ export default function ClientProjectTimeline() {
     const unsubscribeTimeline = onSnapshot(
       timelineQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextEntries = snapshot.docs.map((entryDoc) => ({
           id: entryDoc.id,
           ...entryDoc.data(),
@@ -205,6 +206,7 @@ export default function ClientProjectTimeline() {
     const unsubscribeProjects = onSnapshot(
       projectsQuery,
       (snapshot) => {
+          if (auth.currentUser?.uid !== user.uid) return;
         const nextProjects = snapshot.docs.map((projectDoc) => ({
           id: projectDoc.id,
           ...projectDoc.data(),

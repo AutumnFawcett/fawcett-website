@@ -8,7 +8,7 @@ The Firebase project that has received real consultation submissions or portal a
 
 Emulator mode has a fixed demo project and fixed localhost endpoints. Supplied non-demo browser configuration, live Admin project IDs, service-account values, and remote emulator overrides are rejected. Firebase Admin uses a named demo app and emulator endpoints without service-account credentials. The npm command wrapper removes a platform-supplied `GOOGLE_APPLICATION_CREDENTIALS` binding only from local child processes, without opening the file or changing the parent environment; direct unwrapped execution rejects that binding. Other Firebase credentials are rejected rather than silently removed.
 
-Authentication, Firestore, and Storage SDK calls use the existing application interfaces. Live Production configuration remains supported without changes to Vercel Production settings. Existing rules and payment business logic are unchanged. Emulators exercise the currently checked-in rules, including known privacy gaps; passing tests do not resolve those gaps.
+Authentication, Firestore, and Storage SDK calls use the existing application interfaces. Live Production configuration remains supported without changes to Vercel Production settings. Payment business logic is unchanged. Phase 1 proposes private source records and separate portal projections in local firestore.rules; these rules are exercised only in emulators and are not deployed. See client-privacy-migration.md before any production cutover. Passing local tests does not secure or migrate the live database.
 
 ## Configuration
 

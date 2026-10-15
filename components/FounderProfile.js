@@ -6,9 +6,37 @@ import { auth } from "@/lib/firebaseClient";
 const money = (cents) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(cents / 100);
 export default function FounderProfile() {
   const [state, setState] = useState({ loading: true });
-  const load = useCallback(async (user) => { try { const token = await user.getIdToken(); const response = await fetch("/api/founder/profile", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); if (!response.ok) throw new Error(); setState({ loading: false, ...(await response.json()) }); } catch { setState({ loading: false, error: "Your Founder details are unavailable right now." }); } }, []);
-  useEffect(() => onAuthStateChanged(auth, (user) => user ? load(user) : setState({ loading: false, signedOut: true })), [load]);
-  async function choose(publicRecognitionEnabled) { setState((old) => ({ ...old, saving: true })); try { const token = await auth.currentUser.getIdToken(); const response = await fetch("/api/founder/profile", { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ recognitionMode: publicRecognitionEnabled ? "public" : "anonymous", publicRecognitionEnabled }) }); if (!response.ok) throw new Error(); setState({ loading: false, ...(await response.json()), saved: true }); } catch { setState((old) => ({ ...old, saving: false, error: "The preference could not be saved. Please retry." })); } }
+  const load = useCallback(async (user) => {
+    try {
+      const token = await user.getIdToken();
+      if (auth.currentUser?.uid !== user.uid) return;
+      const response = await fetch("/api/founder/profile", { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      if (!response.ok) throw new Error();
+      const result = await response.json();
+      if (auth.currentUser?.uid === user.uid) setState({ loading: false, ...result });
+    } catch {
+      if (auth.currentUser?.uid === user.uid) setState({ loading: false, error: "Your Founder details are unavailable right now." });
+    }
+  }, []);
+  useEffect(() => onAuthStateChanged(auth, (user) => {
+    setState(user ? { loading: true } : { loading: false, signedOut: true });
+    if (user) load(user);
+  }), [load]);
+  async function choose(publicRecognitionEnabled) {
+    const user = auth.currentUser;
+    if (!user) return;
+    setState((old) => ({ ...old, saving: true }));
+    try {
+      const token = await user.getIdToken();
+      if (auth.currentUser?.uid !== user.uid) return;
+      const response = await fetch("/api/founder/profile", { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ recognitionMode: publicRecognitionEnabled ? "public" : "anonymous", publicRecognitionEnabled }) });
+      if (!response.ok) throw new Error();
+      const result = await response.json();
+      if (auth.currentUser?.uid === user.uid) setState({ loading: false, ...result, saved: true });
+    } catch {
+      if (auth.currentUser?.uid === user.uid) setState((old) => ({ ...old, saving: false, error: "The preference could not be saved. Please retry." }));
+    }
+  }
   if (state.loading) return <main className="founder-portal"><p className="founder-kicker">Loading Founder profile…</p></main>;
   if (state.signedOut) return <main className="founder-portal"><h1>Sign in required.</h1><Link className="button button-primary founder-page-action" href="/tattoo-portal">Sign in</Link></main>;
   if (state.error && !state.profile) return <main className="founder-portal"><h1>Founder profile unavailable.</h1><p>{state.error}</p><button className="button button-primary founder-page-action" onClick={() => auth.currentUser && load(auth.currentUser)}>Retry</button></main>;
