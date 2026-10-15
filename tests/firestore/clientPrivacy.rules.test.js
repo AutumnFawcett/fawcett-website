@@ -276,3 +276,65 @@ test("saving unchanged legacy publication flags does not bypass the migration ho
   await admin.updateDoc(source(db("admin"), "membershipOffers", "legacy-offer"), { status: "membership_offer_sent", adminReview: { internalNotes: "Still private" } });
   assert.equal((await getDoc(view(db("admin"), "membershipOffers", "legacy-offer"))).exists(), false);
 });
+
+test("portal document overloads resolve existing references and auto IDs without remapping IDs", async () => {
+  const database = db();
+  for (const name of Object.keys(projection.PORTAL_FIELDS)) {
+    const records = portal.collection(database, name);
+    for (const id of ["existing-record", "messages"]) {
+      const expected = `portalRecords/${name}/records/${id}`;
+      assert.equal(portal.doc(database, name, id).path, expected);
+      assert.equal(portal.doc(database, `${name}/${id}`).path, expected);
+      assert.equal(portal.doc(records, id).path, expected);
+    }
+    const generated = portal.doc(records);
+    assert.equal(generated.parent.path, records.path);
+    assert.equal(generated.id.length, 20);
+  }
+  assert.throws(() => portal.doc(collection(database, "clients"), "alice"), /Unsupported portal record path/);
+  assert.throws(() => portal.doc(database, "adminUsers", "alice"), /Unsupported portal collection/);
+});
+
+test("selected existing conversation and messages support collection-relative lookups and replies", async () => {
+  await seed("conversations", "selected", { ...identity, createdAt: new Date(), updatedAt: new Date(), status: "new", lastMessagePreview: "Existing", unreadForClient: true });
+  await seed("messages", "history", { clientUid: "alice", conversationId: "selected", senderRole: "admin", body: "Existing reply", createdAt: serverTimestamp() });
+  await seed("conversations", "other", { clientUid: "bob" });
+  const database = db();
+  const conversations = await getDocs(query(portal.collection(database, "conversations"), where("clientUid", "==", "alice")));
+  const selected = conversations.docs[0];
+  assert.equal(selected.id, "selected");
+  const ref = portal.doc(portal.collection(database, "conversations"), selected.id);
+  assert.equal((await getDoc(ref)).data().clientUid, "alice");
+  const messages = await getDocs(query(portal.collection(database, "messages"), where("clientUid", "==", "alice"), where("conversationId", "==", selected.id)));
+  assert.deepEqual(messages.docs.map(d => d.id), ["history"]);
+  assert.equal((await getDoc(portal.doc(portal.collection(database, "messages"), messages.docs[0].id))).data().body, "Existing reply");
+  const reply = await portal.addDoc(portal.collection(database, "messages"), { clientUid: "alice", conversationId: ref.id, senderUid: "alice", senderRole: "client", senderName: "Synthetic Alice", body: "New reply", createdAt: serverTimestamp() });
+  assert.equal((await getDoc(portal.doc(database, "messages", reply.id))).data().conversationId, selected.id);
+  await assertSucceeds(portal.updateDoc(ref, { lastMessagePreview: "New reply", unreadForClient: false, unreadForAdmin: true, updatedAt: serverTimestamp() }));
+  assert.equal((await getDoc(source(db("admin"), "conversations", ref.id))).data().lastMessagePreview, "New reply");
+  await assertFails(getDoc(portal.doc(portal.collection(database, "conversations"), "other")));
+  await assertFails(portal.updateDoc(portal.doc(portal.collection(database, "conversations"), "other"), { unreadForClient: false }));
+});
+
+test("setDoc accepts generated and fixed portal document references with matching original IDs", async () => {
+  const database = db();
+  const client = portal.doc(portal.collection(database, "clients"), "alice");
+  await assertSucceeds(portal.setDoc(client, { ...identity, ...now() }));
+  assert.equal((await getDoc(portal.doc(database, "clients", "alice"))).data().clientUid, "alice");
+  const conversation = portal.doc(portal.collection(database, "conversations"));
+  await assertSucceeds(portal.setDoc(conversation, { ...identity, ...now(), status: "new" }));
+  assert.equal((await getDoc(source(db("admin"), "conversations", conversation.id))).exists(), true);
+});
+
+test("legacy client without projections stays private and cannot be overwritten by portal signup", async () => {
+  await seed("clients", "alice", { ...identity, adminReview: { internalNotes: "Private legacy notes" } }, false);
+  await seed("conversations", "legacy-thread", { ...identity, lastMessagePreview: "Unreviewed legacy content" }, false);
+  const database = db();
+  assert.equal((await getDoc(portal.doc(database, "clients", "alice"))).exists(), false);
+  assert.equal((await getDocs(query(portal.collection(database, "conversations"), where("clientUid", "==", "alice")))).empty, true);
+  await assertFails(getDoc(source(database, "clients", "alice")));
+  await assertFails(portal.setDoc(portal.doc(portal.collection(database, "clients"), "alice"), { ...identity, ...now() }));
+  await assertSucceeds(admin.setDoc(source(db("admin"), "clients", "alice"), { phone: "555-0100" }, { merge: true }));
+  assert.equal((await getDoc(portal.doc(database, "clients", "alice"))).exists(), false);
+  assert.equal((await getDoc(source(db("admin"), "clients", "alice"))).data().adminReview.internalNotes, "Private legacy notes");
+});

@@ -98,3 +98,28 @@ No production record was inspected, so this audit does not establish which real 
 Use only the Phase 0 demo emulators. Run `npm run lint`, `npm run build`, and `npm test`. The privacy suite exercises every mapped source collection, owner/non-owner/anonymous/inactive-admin cases, direct source reads, unconstrained queries, forged projections, nested field injection, sender impersonation, missing/cross-client links, immutable message text, legacy non-publication, health timeline withholding, draft offers and complete source/projection workflows.
 
 No production secrets or new service credentials are required. No dependencies were added. The final test counts and PR validation evidence are recorded in the PR description.
+
+## Final SDK compatibility audit
+
+All current imports of `lib/portalFirestore.js` were reviewed in the dashboard,
+projects, timeline, appointments, credit, membership offers, messages, portal login,
+consult and membership forms. Reads retain native Firebase query/snapshot APIs.
+The adapter supports the patterns used here: `collection(db, name)`,
+`doc(db, name, id)`, slash-separated root paths, `doc(collectionRef, id)`,
+`doc(collectionRef)` with an auto ID, `addDoc(collectionRef, data)`,
+`setDoc(documentRef, data)` and conversation `updateDoc(documentRef, patch)`.
+Collection-relative IDs are resolved inside the mapped collection, without a
+second root-name translation. Private collection references are rejected.
+These are purpose-specific atomic source/projection writers, not a general SDK
+replacement: portal callers currently use no set options, converters, nested
+collections or field/value update overloads. AdminClients' merge writes use the
+separate admin adapter and remain covered by emulator tests.
+
+A verified existing Auth user whose legacy client has no projection receives an
+absent own-profile snapshot and empty projected history, without any fallback to
+private originals. A portal profile creation attempt cannot overwrite that source.
+An admin contact edit preserves private notes and leaves the projection absent.
+Migration must explicitly review and publish an eligible profile at the original
+ID with its verified UID; neither signup nor ordinary edits substitute for that
+approval. These temporary empty portal states are an intentional cutover limitation,
+not evidence that legacy records have been deleted.
