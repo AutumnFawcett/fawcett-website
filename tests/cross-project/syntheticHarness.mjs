@@ -1,3 +1,5 @@
+// DEFERRED in Phase 4A: archival test-only cross-project evidence. Not part of
+// the current demo-fawcett-dev-only workflow; do not execute without new scope.
 // Test-only simulation. No project arguments, credentials, files or live adapter.
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";

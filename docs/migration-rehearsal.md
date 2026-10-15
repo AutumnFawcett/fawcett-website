@@ -1,5 +1,7 @@
 # Phase 3 — approved projection rehearsal
 
+**Phase 4A decision:** retain `fawcett-website-sandbox` as production. `fawcett-website` is not a destination and remains untouched. Use the [in-place readiness plan](in-place-production-readiness.md), [owner checklist](production-inventory-checklist.md) and [adapter design](in-place-adapter-design.md). Cross-project instructions are deferred; no production operation is authorized.
+
 ## Audit and scope
 
 This branch starts from `codex/fawcett-current-work` including merged #32–#34.
@@ -190,5 +192,3 @@ report files, reviewed fixture counts, denied unconfirmed/existing-output/unknow
 project invocations, unchanged rerun counts and rollback counts. Emulator negative
 authorization logs are expected assertions. No live policy/index/data condition was
 validated by these checks.
-
-Owner-confirmed cross-project direction: `fawcett-website-sandbox` → `fawcett-website`; development remains isolated. See the [cross-project approval plan](cross-project-production-plan.md) for Auth/password/session limits, destination collision policy, Storage mapping and additional gates. No live operation is authorized.

@@ -5,7 +5,7 @@ const { initializeTestEnvironment, assertFails, assertSucceeds } = require("@fir
 const { deleteDoc, doc, getDoc, setDoc, updateDoc } = require("firebase/firestore");
 
 let env;
-before(async () => { env = await initializeTestEnvironment({ projectId: "payment-foundation-rules", firestore: { rules: fs.readFileSync(path.resolve("firestore.rules"), "utf8") } }); });
+before(async () => { env = await initializeTestEnvironment({ projectId: "demo-fawcett-dev", firestore: { rules: fs.readFileSync(path.resolve("firestore.rules"), "utf8") } }); });
 afterEach(async () => env.clearFirestore());
 after(async () => env.cleanup());
 
