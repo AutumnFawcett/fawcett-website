@@ -112,8 +112,10 @@ Collection-relative IDs are resolved inside the mapped collection, without a
 second root-name translation. Private collection references are rejected.
 These are purpose-specific atomic source/projection writers, not a general SDK
 replacement: portal callers currently use no set options, converters, nested
-collections or field/value update overloads. AdminClients' merge writes use the
-separate admin adapter and remain covered by emulator tests.
+collections or field/value update overloads. Historical admin merge-write
+regression coverage remains in the emulator suite.
+Phase 2 moved studio client editing to a server-only API; its legacy client panel
+is read-only. See [studio management](admin-client-management.md).
 
 A verified existing Auth user whose legacy client has no projection receives an
 absent own-profile snapshot and empty projected history, without any fallback to
@@ -123,3 +125,5 @@ Migration must explicitly review and publish an eligible profile at the original
 ID with its verified UID; neither signup nor ordinary edits substitute for that
 approval. These temporary empty portal states are an intentional cutover limitation,
 not evidence that legacy records have been deleted.
+
+Phase 3 adds an [emulator-only approved rehearsal](migration-rehearsal.md), an [owner inventory checklist](production-inventory-checklist.md) and a [gated cutover/rollback runbook](production-cutover-runbook.md). These do not execute or authorize a production migration.

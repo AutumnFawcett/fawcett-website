@@ -43,3 +43,5 @@ Never supply the original production project's six variables to complete onboard
 The environment unit suite tests default selection and rejection of live configuration. Integration tests seed twice, sign in, read owned records, reject unauthorized profile writes and anonymous reads, and verify synthetic admin access. Existing payment unit tests use mocks; existing rules tests run locally. No production dataset is needed.
 
 Storage connects to its emulator to prevent a future Storage call from reaching live infrastructure. Its local signed-in access rules are only for synthetic fixtures, not a proposed production policy. JavaScript source files remain JavaScript; `.mjs` is used for modules shared with Node tooling.
+
+Phase 3: [synthetic migration rehearsal](migration-rehearsal.md), [read-only owner inventory](production-inventory-checklist.md), and [cutover/rollback gates](production-cutover-runbook.md). No production execution is included.

@@ -57,3 +57,5 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 Studio client management and production prerequisites: [Phase 2 guide](docs/admin-client-management.md).
+
+Phase 3: [synthetic migration rehearsal](docs/migration-rehearsal.md), [read-only owner inventory](docs/production-inventory-checklist.md), and [cutover/rollback gates](docs/production-cutover-runbook.md). No production execution is included.
