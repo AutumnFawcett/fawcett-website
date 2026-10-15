@@ -361,11 +361,11 @@ service cloud.firestore {
       allow delete: if businessWritesOpen() && (false);
     }
 
+    // Server scheduling transactions are the only business mutation path.
+    // Emulator-tested only; no production deployment is authorized.
     match /appointments/{appointmentId} {
-      allow create: if businessWritesOpen() && (isAdmin());
       allow read: if isAdmin();
-      allow update: if businessWritesOpen() && (isAdmin());
-      allow delete: if businessWritesOpen() && (false);
+      allow create, update, delete: if false;
     }
 
     match /payments/{paymentId} {

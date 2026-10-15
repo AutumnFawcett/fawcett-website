@@ -5940,3 +5940,19 @@ img {
 .studio-payments input[type="checkbox"] { width: auto; justify-self: start; }
 .studio-payments li { margin-bottom: 1rem; overflow-wrap: anywhere; }
 .studio-payments a { color: #60a5fa; }
+
+/* Private studio scheduling: agenda layout on small screens. */
+.scheduling { min-width: 0; }
+.schedule-toolbar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin: 1rem 0; }
+.schedule-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .4rem; }
+.schedule-view-day, .schedule-view-agenda { grid-template-columns: minmax(0, 1fr); }
+.schedule-day { min-width: 0; border: 1px solid #374151; padding: .5rem; }
+.schedule-day h2 { font-size: .85rem; }
+.schedule-card { display: grid; width: 100%; text-align: left; gap: .25rem; margin: .5rem 0; padding: .5rem; background: #111827; color: white; border: 1px solid #60a5fa; overflow-wrap: anywhere; }
+.schedule-autumn { border-style: dashed; }
+.scheduling fieldset { display: grid; gap: .8rem; min-width: 0; }
+.scheduling label { display: grid; gap: .3rem; min-width: 0; }
+.scheduling input, .scheduling select, .scheduling textarea { min-width: 0; max-width: 100%; }
+.scheduling input[type="checkbox"] { width: auto; justify-self: start; }
+.schedule-policy { width: 100%; font-family: monospace; }
+@media (max-width: 760px) { .schedule-calendar { grid-template-columns: minmax(0, 1fr); } .schedule-day { padding: .8rem; } }
