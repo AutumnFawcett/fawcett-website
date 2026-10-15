@@ -207,7 +207,11 @@ test("admin replies, appointments and recorded payments retain relationships and
   assert.equal(safePayment.projectId, project.id); assert.equal(safePayment.appointmentId, appointment.id);
   assert.equal(safePayment.amountCents, 10000); assert.equal(safePayment.reference, undefined);
   const conversation = await admin.addDoc(collection(database, "conversations"), { ...identity, subject: "Synthetic" });
-  const message = await admin.addDoc(collection(database, "messages"), { clientUid: "alice", conversationId: conversation.id, senderUid: "admin", senderRole: "admin", senderName: "Studio", body: "Approved reply", createdAt: serverTimestamp() });
+  // Rules-unit contexts do not have Firebase Auth sessions or an HTTP server.
+  // Exercise the legacy direct-write rules here; authenticated addDoc messaging
+  // is covered with real synthetic Auth tokens in notifications/workflows.
+  const message = doc(collection(database, "messages"));
+  await admin.setDoc(message, { clientUid: "alice", conversationId: conversation.id, senderUid: "admin", senderRole: "admin", senderName: "Studio", body: "Approved reply", createdAt: serverTimestamp() });
   const safeMessage = (await getDoc(view(db(), "messages", message.id))).data();
   assert.equal(safeMessage.body, "Approved reply"); assert.equal(safeMessage.conversationId, conversation.id);
   assert.equal(safeMessage.senderUid, undefined);

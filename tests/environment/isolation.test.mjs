@@ -49,3 +49,19 @@ test("seed refuses cloud project configuration before making any SDK request", a
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Non-demo Firebase Admin project rejected/);
 });
+
+test("Preview builds need no six public Firebase values and reject inherited live settings", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const clean = { ...process.env, NODE_ENV: "production", VERCEL_ENV: "preview" };
+  for (const key of Object.keys(clean)) {
+    if (key.startsWith("NEXT_PUBLIC_FIREBASE_") || key.startsWith("FIREBASE_ADMIN_") || ["GOOGLE_APPLICATION_CREDENTIALS", "FIREBASE_AUTH_EMULATOR_HOST", "FIRESTORE_EMULATOR_HOST", "SQUARE_PAYMENTS_ENABLED"].includes(key)) delete clean[key];
+  }
+  const source = "const {default:c}=await import('./next.config.mjs'); if(c.env.NEXT_PUBLIC_FIREBASE_DEPLOYMENT_ENV !== 'preview') process.exit(1)";
+  const run = extra => spawnSync(process.execPath, ["--input-type=module", "-e", source], { env: { ...clean, ...extra }, encoding: "utf8" });
+  assert.equal(run({}).status, 0);
+  const rejected = run({ NEXT_PUBLIC_FIREBASE_PROJECT_ID: "synthetic-non-demo-rejection-probe" });
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr, /Non-demo Firebase configuration rejected/);
+  assert.notEqual(run({ FIREBASE_ADMIN_PRIVATE_KEY: "synthetic-rejection-probe" }).status, 0);
+  assert.notEqual(run({ SQUARE_PAYMENTS_ENABLED: "true" }).status, 0);
+});
