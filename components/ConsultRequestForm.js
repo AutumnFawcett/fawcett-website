@@ -1,5 +1,6 @@
 "use client";
 
+import { assertBrowserWritesOpen } from "@/lib/safety/browserFence";
 import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
 
 import { useEffect, useState } from "react";
@@ -12,7 +13,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { serverTimestamp } from "firebase/firestore";
-import { addDoc, collection } from "@/lib/portalFirestore";
+import { createPortalSubmission, collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const initialForm = {
@@ -139,6 +140,7 @@ export default function ConsultRequestForm() {
 
     try {
       if (authMode === "signup") {
+        await assertBrowserWritesOpen(db);
         const credential = await createUserWithEmailAndPassword(
           auth,
           form.email,
@@ -156,7 +158,7 @@ export default function ConsultRequestForm() {
       }
     } catch (error) {
       console.error(error);
-      setAuthError(
+      setAuthError(error.code === "maintenance" ? error.message :
         "Login/signup failed. Check your email and password, or try logging in instead."
       );
     }
@@ -174,6 +176,7 @@ export default function ConsultRequestForm() {
     setSubmitError("");
 
     try {
+      const submission = createPortalSubmission(db, { uid: user.uid, kind: "consult" });
       const assignedInbox =
         form.preferredArtist === "ben"
           ? "ben"
@@ -188,7 +191,7 @@ export default function ConsultRequestForm() {
             ? "artist_autumn"
             : null;
 
-      const consultRef = await addDoc(collection(db, "consultRequests"), {
+      const consultRef = await submission.addDoc(collection(db, "consultRequests"), {
         clientUid: user.uid,
         clientName: form.fullName.trim(),
         clientEmail: form.email.trim(),
@@ -241,7 +244,7 @@ export default function ConsultRequestForm() {
 
       const summary = buildConsultSummary(form);
 
-      const conversationRef = await addDoc(collection(db, "conversations"), {
+      const conversationRef = await submission.addDoc(collection(db, "conversations"), {
         clientUid: user.uid,
         clientName: form.fullName.trim(),
         clientEmail: form.email.trim(),
@@ -267,7 +270,7 @@ export default function ConsultRequestForm() {
         updatedAt: serverTimestamp(),
       });
 
-      await addDoc(collection(db, "messages"), {
+      await submission.addDoc(collection(db, "messages"), {
         conversationId: conversationRef.id,
         applicationId: null,
         consultRequestId: consultRef.id,
@@ -284,10 +287,11 @@ export default function ConsultRequestForm() {
         createdAt: serverTimestamp(),
       });
 
+      await submission.commit();
       router.push("/portal/messages");
     } catch (error) {
       console.error(error);
-      setSubmitError("Could not submit consult request. Please try again.");
+      setSubmitError(error.code === "maintenance" ? error.message : "Could not submit consult request. Keep this page open and retry. If an account was created, sign in with the same account.");
     } finally {
       setIsSubmitting(false);
     }

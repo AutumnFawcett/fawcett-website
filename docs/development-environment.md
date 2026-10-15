@@ -58,3 +58,26 @@ Phase 5 adds [portal email verification](portal-email-verification.md). Local
 verification uses only the Auth emulator and fictional `@example.test` addresses;
 `npm run test:verification` requires no email service credentials. Live verification
 has a separate default-off activation switch. Resend and payments remain off.
+
+
+## Phase 6A maintenance and publication controls
+
+`npm run seed:emulators` creates an explicitly open **synthetic-only**
+`systemControls/writeFence` and reviewed fixture metadata. It never provisions a
+production control. Without a valid control, development writes fail closed;
+building and safe reads do not require opening the fence. Never add a startup
+fallback that opens a missing control on an application request.
+
+Start the fixed emulators (`npm run emulators`), run the existing seed command in
+a second terminal, then start `npm run dev`. Do not run emulator suites concurrently
+or against an interactive emulator containing work you want to retain: test suites
+clear the fictional database. `npm test` includes `test:safety` and runs the active
+emulator suites sequentially. No new secrets, Firebase projects, email provider or
+payment configuration are required. Existing off switches stay off.
+
+Admin-created CRM records now require a separate review at `/admin/publication`
+before appearing in the portal. Use only synthetic paths/accounts here. See the
+[Phase 6A owner runbook](write-fence-publication-controls.md) for the state schema,
+mutation inventory, retry behavior, approval gates and read-only synthetic
+reconciliation command. Repository rules changes are approved for emulator testing
+only; production deployment remains a separate owner decision.

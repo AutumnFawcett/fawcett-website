@@ -23,7 +23,10 @@ const request = (input, uid = adminUid) => handleAdminMessage(new Request("http:
 async function seed(collectionName = "consultRequests", id = "synthetic-intake", patch = {}, view = true) {
   const data = { clientUid, clientEmail: "FORGED-RECIPIENT@external.example", createdAt: Timestamp.fromMillis(0), adminReview: { internalNotes: "SYNTHETIC PRIVATE HEALTH NOTE" }, ...patch };
   await db.doc(`${collectionName}/${id}`).set(data);
-  if (view) await db.doc(`portalRecords/${collectionName}/records/${id}`).set({ clientUid: data.clientUid });
+  if (view) {
+    await db.doc(`portalRecords/${collectionName}/records/${id}`).set({ clientUid: data.clientUid });
+    await db.doc(`publicationRecords/${collectionName}/records/${id}`).set({ schemaVersion: 1, state: "approved", approved: { clientUid: data.clientUid } });
+  }
   return data;
 }
 const jobs = async () => (await db.collection("notificationQueue").get()).docs;
@@ -48,6 +51,7 @@ before(async () => {
 });
 beforeEach(async () => {
   const cleared = await fetch(`http://127.0.0.1:8080/emulator/v1/projects/${DEMO_PROJECT_ID}/databases/(default)/documents`, { method: "DELETE" }); assert.ok(cleared.ok);
+  await db.doc("systemControls/writeFence").set({ schemaVersion: 1, state: "open", epoch: "test", writerProtocol: 1 });
   await db.doc(`adminUsers/${adminUid}`).set({ active: true }); await db.doc("adminUsers/notifications-inactive").set({ active: false });
   config = notificationConfig({ NOTIFICATIONS_MODE: "test", NOTIFICATION_ACTIVATED_AT: new Date(Date.now() - 1000).toISOString() });
 });

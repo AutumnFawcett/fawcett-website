@@ -1,5 +1,6 @@
 "use client";
 
+import { assertBrowserWritesOpen } from "@/lib/safety/browserFence";
 import { verifyAfterRegistration } from "@/lib/verification/client.mjs";
 
 import { useEffect, useMemo, useState } from "react";
@@ -12,7 +13,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { serverTimestamp } from "firebase/firestore";
-import { addDoc, collection } from "@/lib/portalFirestore";
+import { createPortalSubmission, collection } from "@/lib/portalFirestore";
 import { auth, db } from "@/lib/firebaseClient";
 
 const initialForm = {
@@ -114,6 +115,7 @@ export default function MembershipApplicationForm() {
 
     try {
       if (authMode === "signup") {
+        await assertBrowserWritesOpen(db);
         const credential = await createUserWithEmailAndPassword(
           auth,
           authEmail,
@@ -136,7 +138,7 @@ export default function MembershipApplicationForm() {
       }
     } catch (error) {
       console.error(error);
-      setAuthError(
+      setAuthError(error.code === "maintenance" ? error.message :
         "Login failed. Check your email/password or try creating an account."
       );
     }
@@ -159,7 +161,8 @@ export default function MembershipApplicationForm() {
     setSubmitError("");
 
     try {
-      const applicationRef = await addDoc(
+      const submission = createPortalSubmission(db, { uid: user.uid, kind: "membership" });
+      const applicationRef = await submission.addDoc(
         collection(db, "membershipApplications"),
         {
           programName: "Tattoo Project Membership Program",
@@ -226,7 +229,7 @@ export default function MembershipApplicationForm() {
         }
       );
 
-      const conversationRef = await addDoc(collection(db, "conversations"), {
+      const conversationRef = await submission.addDoc(collection(db, "conversations"), {
         applicationId: applicationRef.id,
         clientUid: user.uid,
         clientEmail: user.email,
@@ -247,7 +250,7 @@ export default function MembershipApplicationForm() {
         updatedAt: serverTimestamp(),
       });
 
-      await addDoc(collection(db, "messages"), {
+      await submission.addDoc(collection(db, "messages"), {
         conversationId: conversationRef.id,
         applicationId: applicationRef.id,
         clientUid: user.uid,
@@ -261,6 +264,7 @@ export default function MembershipApplicationForm() {
         createdAt: serverTimestamp(),
       });
 
+      await submission.commit();
       router.push("/tattoo-project-membership/thank-you");
     } catch (error) {
       console.error(error);

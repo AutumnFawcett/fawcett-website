@@ -15,7 +15,10 @@ async function seed(name, id, data, withView = true) {
     const database = ctx.firestore();
     await setDoc(source(database, name, id), data);
     const publicData = projection.portalProjection(name, data);
-    if (withView && publicData) await setDoc(view(database, name, id), publicData);
+    if (withView && publicData) {
+      await setDoc(view(database, name, id), publicData);
+      await setDoc(doc(database, "publicationRecords", name, "records", id), { schemaVersion: 1, state: "approved", approved: publicData });
+    }
   });
 }
 before(async () => {
@@ -26,6 +29,7 @@ before(async () => {
 });
 beforeEach(async () => {
   await env.clearFirestore();
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "systemControls/writeFence"), { schemaVersion: 1, state: "open", epoch: "test", writerProtocol: 1 }));
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), "adminUsers", "admin"), { active: true });
     await setDoc(doc(ctx.firestore(), "adminUsers", "inactive"), { active: false });
@@ -61,17 +65,17 @@ test("private originals and unconstrained portal collection queries are denied",
 });
 
 test("admin helper writes private review/health and a safe linked projection atomically", async () => {
-  const ref = await assertSucceeds(admin.addDoc(collection(db("admin"), "projects"), {
+  const ref = await assertSucceeds(reviewedAddDoc(collection(db("admin"), "projects"), {
     ...identity, ...now(), consultRequestId: "consult", applicationId: "application", projectName: "Synthetic project",
     readiness: { healthDetails: "Private health", healthConsiderations: "yes" },
     estimate: { estimateLowCents: 10000, updatedBy: "staff@example.test" },
     adminReview: { internalNotes: "Private", clientProjectSummary: "Approved summary" },
   }));
-  await assertSucceeds(admin.updateDoc(ref, { "adminReview.internalNotes": "Changed private", "estimate.estimateHighCents": 20000 }));
+  await assertSucceeds(reviewedUpdateDoc(ref, { "adminReview.internalNotes": "Changed private", "estimate.estimateHighCents": 20000 }));
   const privateData = (await getDoc(ref)).data();
   assert.equal(privateData.adminReview.internalNotes, "Changed private");
   const publicData = (await getDoc(view(db(), "projects", ref.id))).data();
-  assert.equal(publicData.clientProjectSummary, "Approved summary");
+  assert.equal(publicData.clientProjectSummary, undefined);
   assert.equal(publicData.consultRequestId, "consult");
   assert.equal(publicData.applicationId, "application");
   assert.equal(publicData.estimate.estimateHighCents, 20000);
@@ -98,7 +102,7 @@ test("even active browser admins cannot put private fields or misassigned relati
 
 test("legacy admin edits never backfill portal records or expose old message bodies", async () => {
   await seed("messages", "legacy", { ...identity, senderRole: "client", body: "Old synthetic health summary" }, false);
-  await assertSucceeds(admin.updateDoc(source(db("admin"), "messages", "legacy"), { "adminReview.internalNotes": "Private review" }));
+  await assertSucceeds(reviewedUpdateDoc(source(db("admin"), "messages", "legacy"), { "adminReview.internalNotes": "Private review" }));
   const result = await getDoc(view(db("admin"), "messages", "legacy"));
   assert.equal(result.exists(), false);
   await assertFails(getDoc(source(db(), "messages", "legacy")));
@@ -106,11 +110,11 @@ test("legacy admin edits never backfill portal records or expose old message bod
 
 test("private and health timeline entries have no portal projection; publication can be withdrawn", async () => {
   const database = db("admin");
-  const health = await assertSucceeds(admin.addDoc(collection(database, "projectTimeline"), { ...identity, entryType: "health_skin_note", clientVisible: true, body: "Private synthetic health note" }));
+  const health = await assertSucceeds(reviewedAddDoc(collection(database, "projectTimeline"), { ...identity, entryType: "health_skin_note", clientVisible: true, body: "Private synthetic health note" }));
   assert.equal((await getDoc(view(database, "projectTimeline", health.id))).exists(), false);
-  const normal = await admin.addDoc(collection(database, "projectTimeline"), { ...identity, entryType: "client_update", clientVisible: true, body: "Approved update", createdBy: "staff@example.test" });
+  const normal = await reviewedAddDoc(collection(database, "projectTimeline"), { ...identity, entryType: "client_update", clientVisible: true, body: "Approved update", createdBy: "staff@example.test" });
   assert.equal((await getDoc(view(db(), "projectTimeline", normal.id))).data().createdBy, undefined);
-  await admin.updateDoc(normal, { clientVisible: false });
+  await reviewedUpdateDoc(normal, { clientVisible: false });
   assert.equal((await getDoc(view(database, "projectTimeline", normal.id))).exists(), false);
   assert.equal((await getDoc(normal)).data().body, "Approved update");
 });
@@ -119,7 +123,7 @@ test("draft offers and staff identifiers stay private; sent offer terms remain u
   const data = { ...identity, membershipOffer: { tier: "starter_member", initialPaymentCents: 10000, offerStatus: "membership_offer_draft", updatedBy: "staff@example.test" } };
   await seed("membershipApplications", "application", data);
   assert.equal((await getDoc(view(db(), "membershipApplications", "application"))).data().membershipOffer, undefined);
-  await admin.updateDoc(source(db("admin"), "membershipApplications", "application"), { "membershipOffer.offerStatus": "membership_offer_sent", "membershipOffer.sentBy": "staff@example.test", "membershipOffer.sentAt": serverTimestamp() });
+  await reviewedUpdateDoc(source(db("admin"), "membershipApplications", "application"), { "membershipOffer.offerStatus": "membership_offer_sent", "membershipOffer.sentBy": "staff@example.test", "membershipOffer.sentAt": serverTimestamp() });
   const offer = (await getDoc(view(db(), "membershipApplications", "application"))).data().membershipOffer;
   assert.equal(offer.initialPaymentCents, 10000);
   assert.equal(offer.updatedBy, undefined);
@@ -188,7 +192,7 @@ test("complete membership intake, offer response, and change requests retain lin
   assert.equal((await getDoc(app)).data().readiness, undefined);
   assert.equal((await getDoc(source(db("admin"), "membershipApplications", app.id))).data().readiness.healthDetails, "Private synthetic health details");
   const response = await assertSucceeds(portal.addDoc(portal.collection(database, "membershipOfferResponses"), { clientUid: "alice", applicationId: app.id, responseType: "ask_question", responseStatus: "new", clientNote: "Synthetic question", ...now() }));
-  await assertSucceeds(admin.updateDoc(source(db("admin"), "membershipOfferResponses", response.id), { "adminReview.internalNotes": "Private review", responseStatus: "reviewed" }));
+  await assertSucceeds(reviewedUpdateDoc(source(db("admin"), "membershipOfferResponses", response.id), { "adminReview.internalNotes": "Private review", responseStatus: "reviewed" }));
   const publicResponse = (await getDoc(response)).data();
   assert.equal(publicResponse.applicationId, app.id);
   assert.equal(publicResponse.responseStatus, "reviewed");
@@ -199,27 +203,27 @@ test("complete membership intake, offer response, and change requests retain lin
 
 test("admin replies, appointments and recorded payments retain relationships and private metadata", async () => {
   const database = db("admin");
-  const project = await admin.addDoc(collection(database, "projects"), { ...identity, projectName: "Synthetic project" });
-  const appointment = await admin.addDoc(collection(database, "appointments"), { ...identity, projectId: project.id, title: "Synthetic appointment", clientVisibleNotes: "Approved note", internalNotes: "Private appointment note" });
-  const payment = await admin.addDoc(collection(database, "payments"), { ...identity, projectId: project.id, appointmentId: appointment.id, amountCents: 10000, currency: "CAD", status: "paid", reference: "Private bookkeeping", adminReview: { internalNotes: "Private payment note" } });
+  const project = await reviewedAddDoc(collection(database, "projects"), { ...identity, projectName: "Synthetic project" });
+  const appointment = await reviewedAddDoc(collection(database, "appointments"), { ...identity, projectId: project.id, title: "Synthetic appointment", clientVisibleNotes: "Approved note", internalNotes: "Private appointment note" });
+  const payment = await reviewedAddDoc(collection(database, "payments"), { ...identity, projectId: project.id, appointmentId: appointment.id, amountCents: 10000, currency: "CAD", status: "paid", reference: "Private bookkeeping", adminReview: { internalNotes: "Private payment note" } });
   assert.equal((await getDoc(view(db(), "appointments", appointment.id))).data().clientVisibleNotes, "Approved note");
   const safePayment = (await getDoc(view(db(), "payments", payment.id))).data();
   assert.equal(safePayment.projectId, project.id); assert.equal(safePayment.appointmentId, appointment.id);
   assert.equal(safePayment.amountCents, 10000); assert.equal(safePayment.reference, undefined);
-  const conversation = await admin.addDoc(collection(database, "conversations"), { ...identity, subject: "Synthetic" });
+  const conversation = await reviewedAddDoc(collection(database, "conversations"), { ...identity, subject: "Synthetic" });
   // Rules-unit contexts do not have Firebase Auth sessions or an HTTP server.
   // Exercise the legacy direct-write rules here; authenticated addDoc messaging
   // is covered with real synthetic Auth tokens in notifications/workflows.
   const message = doc(collection(database, "messages"));
-  await admin.setDoc(message, { clientUid: "alice", conversationId: conversation.id, senderUid: "admin", senderRole: "admin", senderName: "Studio", body: "Approved reply", createdAt: serverTimestamp() });
+  await reviewedSetDoc(message, { clientUid: "alice", conversationId: conversation.id, senderUid: "admin", senderRole: "admin", senderName: "Studio", body: "Approved reply", createdAt: serverTimestamp() });
   const safeMessage = (await getDoc(view(db(), "messages", message.id))).data();
   assert.equal(safeMessage.body, "Approved reply"); assert.equal(safeMessage.conversationId, conversation.id);
   assert.equal(safeMessage.senderUid, undefined);
 });
 
-test("full admin-created project payload fits the rules budget and hides copied health/review data", async () => {
+test("full admin-created project stays private until reviewed and hides copied health/review data", async () => {
   const app = applicationData();
-  const ref = await assertSucceeds(admin.addDoc(collection(db("admin"), "projects"), {
+  const ref = await assertSucceeds(reviewedAddDoc(collection(db("admin"), "projects"), {
     ...identity, ...now(), applicationId: "synthetic-application", consultRequestId: null,
     projectName: "Synthetic complete project", assignedInbox: "general", assignedArtistId: null, preferredArtist: "not_sure", status: "review",
     source: { sourceType: "membershipApplication", sourceId: "synthetic-application" },
@@ -250,17 +254,17 @@ test("every text-map field rejects structured private values in direct admin pro
 });
 
 test("public artist catalog references are preserved but arbitrary staff identifiers are not published", async () => {
-  const safe = await admin.addDoc(collection(db("admin"), "projects"), { ...identity, assignedInbox: "autumn", assignedArtistId: "artist_autumn" });
+  const safe = await reviewedAddDoc(collection(db("admin"), "projects"), { ...identity, assignedInbox: "autumn", assignedArtistId: "artist_autumn" });
   assert.equal((await getDoc(view(db(), "projects", safe.id))).data().assignedArtistId, "artist_autumn");
-  const hidden = await admin.addDoc(collection(db("admin"), "projects"), { ...identity, assignedInbox: "autumn", assignedArtistId: "private-staff-auth-uid" });
+  const hidden = await reviewedAddDoc(collection(db("admin"), "projects"), { ...identity, assignedInbox: "autumn", assignedArtistId: "private-staff-auth-uid" });
   assert.equal((await getDoc(view(db(), "projects", hidden.id))).data().assignedArtistId, undefined);
   await assertFails(updateDoc(view(db("admin"), "projects", hidden.id), { assignedArtistId: "private-staff-auth-uid" }));
 });
 
 test("standalone offer drafts stay private until an explicit published-status action", async () => {
-  const ref = await admin.addDoc(collection(db("admin"), "membershipOffers"), { ...identity, status: "membership_offer_draft", tier: "starter_member", adminReview: { internalNotes: "Private negotiation" } });
+  const ref = await reviewedAddDoc(collection(db("admin"), "membershipOffers"), { ...identity, status: "membership_offer_draft", tier: "starter_member", adminReview: { internalNotes: "Private negotiation" } });
   assert.equal((await getDoc(view(db("admin"), "membershipOffers", ref.id))).exists(), false);
-  await admin.updateDoc(ref, { status: "membership_offer_sent", sentAt: serverTimestamp() });
+  await reviewedUpdateDoc(ref, { status: "membership_offer_sent", sentAt: serverTimestamp() });
   assert.equal((await getDoc(view(db(), "membershipOffers", ref.id))).data().tier, "starter_member");
 });
 
@@ -274,10 +278,10 @@ test("portal signup creates a private profile and an owned safe profile without 
 
 test("saving unchanged legacy publication flags does not bypass the migration hold", async () => {
   await seed("projectTimeline", "legacy-visible", { ...identity, clientVisible: true, entryType: "client_update", body: "Legacy content awaiting review" }, false);
-  await admin.updateDoc(source(db("admin"), "projectTimeline", "legacy-visible"), { clientVisible: true, status: "reviewed" });
+  await reviewedUpdateDoc(source(db("admin"), "projectTimeline", "legacy-visible"), { clientVisible: true, status: "reviewed" });
   assert.equal((await getDoc(view(db("admin"), "projectTimeline", "legacy-visible"))).exists(), false);
   await seed("membershipOffers", "legacy-offer", { ...identity, status: "membership_offer_sent", tier: "starter_member" }, false);
-  await admin.updateDoc(source(db("admin"), "membershipOffers", "legacy-offer"), { status: "membership_offer_sent", adminReview: { internalNotes: "Still private" } });
+  await reviewedUpdateDoc(source(db("admin"), "membershipOffers", "legacy-offer"), { status: "membership_offer_sent", adminReview: { internalNotes: "Still private" } });
   assert.equal((await getDoc(view(db("admin"), "membershipOffers", "legacy-offer"))).exists(), false);
 });
 
@@ -342,3 +346,30 @@ test("legacy client without projections stays private and cannot be overwritten 
   assert.equal((await getDoc(portal.doc(database, "clients", "alice"))).exists(), false);
   assert.equal((await getDoc(source(db("admin"), "clients", "alice"))).data().adminReview.internalNotes, "Private legacy notes");
 });
+
+// Explicit review is a separate action in these compatibility fixtures. Ordinary
+// source saves are tested as withheld/frozen in writeFence.rules.test.js.
+async function publishFixture(ref) {
+  const original = (await getDoc(ref)).data();
+  const approved = projection.portalProjection(ref.parent.id, original);
+  if (!approved) return;
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), admin.portalRecordRef(ref).path), approved);
+    await setDoc(doc(ctx.firestore(), "publicationRecords", ref.parent.id, "records", ref.id), { schemaVersion: 1, state: "approved", approved });
+  });
+}
+async function reviewedAddDoc(collection, data) {
+  const ref = collection.id === "conversations" ? doc(collection) : await admin.addDoc(collection, data);
+  if (collection.id === "conversations") await admin.setDoc(ref, data);
+  await publishFixture(ref); return ref;
+}
+async function reviewedSetDoc(ref, data) {
+  await admin.setDoc(ref, data); await publishFixture(ref);
+}
+async function reviewedUpdateDoc(ref, patch) {
+  const before = (await getDoc(ref)).data();
+  const hadView = (await getDoc(admin.portalRecordRef(ref))).exists();
+  await admin.updateDoc(ref, patch);
+  if (hadView || (ref.parent.id === "projectTimeline" && before.clientVisible !== true && patch.clientVisible === true)
+    || (ref.parent.id === "membershipOffers" && before.status === "membership_offer_draft" && patch.status === "membership_offer_sent")) await publishFixture(ref);
+}

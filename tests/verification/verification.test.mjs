@@ -39,6 +39,7 @@ before(async () => {
 let index = 0;
 beforeEach(async () => {
   assert.ok((await fetch(`http://127.0.0.1:8080/emulator/v1/projects/${DEMO_PROJECT_ID}/databases/(default)/documents`, { method: "DELETE" })).ok);
+  await db.doc("systemControls/writeFence").set({ schemaVersion: 1, state: "open", epoch: "test", writerProtocol: 1 });
   user = await fresh(String(index++));
 });
 after(async () => { await deleteBrowser(browser); await deleteApp(app); });
@@ -150,6 +151,7 @@ test("new signup preserves portal access and unverified accounts still cannot re
   assert.ok((await getDoc(doc(bd, "portalRecords", "clients", "records", uid))).exists());
   await db.doc("consultRequests/unverified-new-signup").set({ clientUid: uid });
   await db.doc("portalRecords/consultRequests/records/unverified-new-signup").set({ clientUid: uid });
+  await db.doc("publicationRecords/consultRequests/records/unverified-new-signup").set({ schemaVersion: 1, state: "approved", approved: { clientUid: uid } });
   const config = notificationConfig({ NOTIFICATIONS_MODE: "test", NOTIFICATION_ACTIVATED_AT: new Date(Date.now() - 1000).toISOString() });
   await discoverNotifications(db, config); const sent = [];
   await processNotifications(db, auth, config, async (envelope, id) => { sent.push(envelope); return { id }; });

@@ -1,3 +1,4 @@
+import { OPEN_EMULATOR_FENCE, WRITE_FENCE_PATH } from "../lib/safety/writeFence.mjs";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
@@ -27,6 +28,7 @@ export async function seedEmulators() {
     const now = Timestamp.now();
     const identity = { clientUid: "synthetic-client", clientName: "Synthetic Client", clientEmail: "client@example.test", phone: "555-0100", instagram: "", createdAt: now, updatedAt: now };
     const records = {
+      [WRITE_FENCE_PATH]: OPEN_EMULATOR_FENCE,
       "adminUsers/synthetic-admin": { active: true },
       "clients/synthetic-client": { ...identity, status: "lead", source: "synthetic_emulator" },
       "consultRequests/synthetic-consult": { ...identity, preferredContactMethod: "email", preferredArtist: "not_sure", assignedInbox: "general", assignedArtistId: null, status: "new", request: { tattooIdea: "Synthetic botanical design", projectType: "other", placement: "Arm", bodySide: "left", approximateSize: "Small", colourPreference: "black_and_grey", styleDirection: "Botanical", budgetRange: "Synthetic budget", availability: "Weekdays", referenceLinks: "" }, coverUp: { isCoverUp: "no", coverUpDescription: "" }, timeline: { timeline: "planning_ahead", isUrgent: "no" }, readiness: { healthNotes: "" }, acknowledgements: { acknowledgementAccurate: true, acknowledgementNoGuarantee: true, acknowledgementPolicy: true } },
@@ -40,7 +42,10 @@ export async function seedEmulators() {
       const [name, id] = path.split("/");
       if (PORTAL_FIELDS[name]) {
         const projection = portalProjection(name, value);
-        if (projection) batch.set(db.doc(`portalRecords/${name}/records/${id}`), projection);
+        if (projection) {
+          batch.set(db.doc(`portalRecords/${name}/records/${id}`), projection);
+          batch.set(db.doc(`publicationRecords/${name}/records/${id}`), { schemaVersion: 1, state: "approved", mode: "synthetic_review", approved: projection });
+        }
       }
     }
     await batch.commit();

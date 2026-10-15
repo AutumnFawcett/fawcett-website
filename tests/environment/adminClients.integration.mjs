@@ -28,6 +28,7 @@ before(async () => {
   browser = clientApp(firebaseEnvironment().config, "phase2-browser");
   browserAuth = clientAuth(browser); connectAuthEmulator(browserAuth, "http://127.0.0.1:9099", { disableWarnings: true });
   browserDb = clientDb(browser); connectFirestoreEmulator(browserDb, "127.0.0.1", 8080);
+  await firestore.doc("systemControls/writeFence").set({ schemaVersion: 1, state: "open", epoch: "test", writerProtocol: 1 });
   tokens = {};
   for (const [uid, active] of [[adminUid, true], ["phase2-inactive", false], ["phase2-client", null]]) {
     try { await auth.createUser({ uid, email: `${uid}@example.test`, password: "Synthetic-only-123!" }); } catch (e) { if (e.code !== "auth/uid-already-exists" && e.code !== "auth/email-already-exists") throw e; }

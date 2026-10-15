@@ -1,5 +1,10 @@
 # Phase 4A — in-place production privacy readiness
 
+> Phase 6A development update: [enforced fence and publication controls](write-fence-publication-controls.md)
+> supersedes earlier repository gap descriptions and cached-source-only behavior.
+> The live rules/writers are unverified and no production operation is authorized.
+
+
 **Current decision:** retain `fawcett-website-sandbox` as the data-bearing production
 backend. Its name does not make its real accounts or records disposable.
 `fawcett-website` is **not a destination** and must remain untouched. Development,

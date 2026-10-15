@@ -61,11 +61,14 @@ before(async () => {
   });
 });
 
-beforeEach(async () => testEnv.clearFirestore());
+beforeEach(async () => {
+  await testEnv.clearFirestore();
+  await testEnv.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), "systemControls/writeFence"), { schemaVersion: 1, state: "open", epoch: "test", writerProtocol: 1 }));
+});
 after(async () => testEnv.cleanup());
 
 test("authenticated client creates a valid request for their own UID", async () => {
-  await assertSucceeds(setDoc(requestRef("client-one"), validRequest()));
+  await assertSucceeds(createPaired(requestRef("client-one"), validRequest()));
 });
 
 test("unauthenticated creation is denied", async () => {
@@ -149,3 +152,14 @@ test("user without an adminUsers record cannot perform administrative access", a
   await assertFails(getDoc(ref));
   await assertFails(updateDoc(ref, { requestStatus: "reviewed" }));
 });
+
+async function createPaired(ref, data) {
+  const { writeBatch } = require("firebase/firestore");
+  const { portalProjection } = await import("../../lib/portalProjection.mjs");
+  const name = ref.parent.id, approved = portalProjection(name, data);
+  const batch = writeBatch(ref.firestore);
+  batch.set(ref, data);
+  batch.set(doc(ref.firestore, "portalRecords", name, "records", ref.id), approved);
+  batch.set(doc(ref.firestore, "publicationRecords", name, "records", ref.id), { schemaVersion: 1, state: "approved", mode: "client_origin", actorUid: data.clientUid, reviewedAt: require("firebase/firestore").serverTimestamp(), fenceEpoch: "test", approved });
+  return batch.commit();
+}
