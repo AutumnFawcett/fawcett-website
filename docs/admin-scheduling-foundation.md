@@ -41,11 +41,13 @@ remain entirely private. Existing original records are admin-only. A withdrawn
 appointment temporarily disappears from the portal until re-reviewed; staff must
 communicate changes manually because no emails/reminders are sent.
 
-## Booking policy — no actual hours are invented
+## Booking policy and explicit activation
 
-The default proposal has `enabled: false`, empty studio/artist hours,
-`timezone: America/Edmonton`, `timezoneApproved: false` and
-`transitionReviewed: false`. Empty days are closed. The zero buffer proposal is not
+The holiday follow-up incorporates owner-confirmed `America/Edmonton` and studio
+hours Sunday–Friday 11:00–20:00, Saturday closed, for new policies.
+Existing stored policies are never silently overwritten; use the explicit confirmed-hours
+button, review and save. Artist availability remains empty until configured.
+`enabled` and `transitionReviewed` remain false. Empty artist/day intervals are closed. The zero buffer proposal is not
 an assertion of actual studio policy. An admin must review all settings before
 booking. Missing or malformed policy fails closed. No seed automatically enables it.
 
@@ -73,8 +75,7 @@ Active appointments must fit one local calendar day INCLUDING buffers. Split
 multi-day events into individually reviewed entries; recurring/multi-day series
 and overnight hours are not implemented. DST gaps/repeated wall times are rejected
 rather than guessed. Modern quarter-hour UTC offsets are supported; historical
-non-quarter-hour zones are not an import mechanism. Edmonton is proposed pending
-owner approval. Timezone changes with active reservations are rejected, requiring a
+non-quarter-hour zones are not an import mechanism. Edmonton is owner-confirmed. Timezone changes with active reservations are rejected, requiring a
 separate reservation reconciliation design. Every request includes expected policy
 revision, preventing stale browsers from interpreting times under a changed policy.
 
@@ -153,7 +154,7 @@ Owner checklist before declaring CRM the master BUSINESS calendar:
 2. Owners inspect their calendar themselves and identify business appointments and
    business-only availability constraints. Personal commitments become generic
    “Unavailable” blocks with no family details, if necessary.
-3. Agree proposed timezone, actual studio/artist hours, buffers, chair/exclusive-day
+3. Apply confirmed Edmonton timezone and Sunday–Friday 11:00–20:00 studio hours; agree artist hours, buffers, chair/exclusive-day
    rules, blackout dates, blocking statuses and staff responsibilities.
 4. Reconcile legacy Firestore originals individually using protected inventory and
    baseline review procedures. Retain exact IDs/relationships; stop on uncertainty.
@@ -197,7 +198,9 @@ recurrence, external synchronization or automated deposit policy is supplied. Th
 production operator currently rejects these unknown roots/subcollections; its
 inventory scope must be separately reviewed before future execution.
 
-Owner decisions still needed: timezone approval, actual hours, artist exceptions,
-buffers, chair-free types, TAPOUT/BUYOUT/event exclusivity, blackout responsibilities,
+Owner decisions still needed: artist availability, buffers, artist exceptions,
+chair-free types, TAPOUT/BUYOUT/event exclusivity, blackout responsibilities,
 legacy identity evidence, business-calendar completeness, booking/deposit policies,
 manual communication, production rollout timing and future scaling requirements.
+
+Holiday sources, sundown conventions and reviewed closure controls: [holiday awareness](scheduling-holidays.md).

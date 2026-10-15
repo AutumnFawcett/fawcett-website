@@ -40,10 +40,10 @@ beforeEach(async () => {
   await db.doc("schedulingConfig/policy").set(policy());
 });
 after(async () => { await deleteBrowser(browser); await deleteApp(app); });
-test("proposed policy has no business hours and requires explicit timezone approval", () => {
-  const proposal = proposedPolicy(); assert.equal(proposal.enabled, false); assert.equal(proposal.timezone, "America/Edmonton"); assert.equal(proposal.timezoneApproved, false);
-  assert.ok(Object.values(proposal.studioHours).every(a => a.length === 0));
-  assert.throws(() => policyInput({ ...proposal, enabled: true }), /timezone_approval_required/);
+test("confirmed studio hours do not activate bookings or invent artist availability", () => {
+  const proposal = proposedPolicy(); assert.equal(proposal.enabled, false); assert.equal(proposal.timezone, "America/Edmonton"); assert.equal(proposal.timezoneApproved, true);
+  assert.deepEqual(proposal.studioHours[0], [{ start: "11:00", end: "20:00" }]); assert.deepEqual(proposal.studioHours[6], []); assert.ok(Object.values(proposal.artistHours.ben).every(a => a.length === 0));
+  assert.throws(() => policyInput({ ...proposal, timezoneApproved: false, enabled: true }), /timezone_approval_required/);
   const unsafe = policy(); unsafe.types.tattoo_session.chair = false;
   assert.throws(() => policyInput(unsafe), /tattoo_requires_shared_chair/);
 });
@@ -250,4 +250,15 @@ test("safe cancellation remains possible after a client is archived without rein
   await save(appointment({ status: "cancelled" }), { id: result.id, revision: 1 });
   assert.equal((await db.doc(`appointments/${result.id}`).get()).data().status, "cancelled");
   assert.deepEqual((await db.doc("scheduleReservations/chair_2030-01-07").get()).data().entries, []);
+});
+
+test("holiday controls and audits reject direct browser reads and writes even from admins", async () => {
+  await db.doc("schedulingHolidayPolicies/synthetic").set({ state: "closed", revision: 1 });
+  for (const uid of [staff, alice]) {
+    await signInWithEmailAndPassword(ba, `${uid}@example.test`, "Synthetic-only-123!");
+    for (const path of ["schedulingHolidayPolicies/synthetic", "schedulingHolidayPolicies/synthetic/audit/forged"]) {
+      await assert.rejects(getDocFromServer(doc(bd, path)), error => error.code === "permission-denied");
+      await assert.rejects(setDoc(doc(bd, path), { state: "reminder" }), error => error.code === "permission-denied");
+    }
+  }
 });
