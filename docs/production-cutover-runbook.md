@@ -186,3 +186,5 @@ Admin SDK operators can bypass rules/journals; restrict and monitor operational
 privileges. Studio account linking, legacy duplicate review/migration and correcting
 reviewed associations remain separately controlled work. This phase establishes
 rehearsal evidence only, not production readiness signoff.
+
+Owner-confirmed cross-project direction: `fawcett-website-sandbox` → `fawcett-website`; development remains isolated. See the [cross-project approval plan](cross-project-production-plan.md) for Auth/password/session limits, destination collision policy, Storage mapping and additional gates. No live operation is authorized.

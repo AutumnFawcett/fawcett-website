@@ -59,3 +59,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 Studio client management and production prerequisites: [Phase 2 guide](docs/admin-client-management.md).
 
 Phase 3: [synthetic migration rehearsal](docs/migration-rehearsal.md), [read-only owner inventory](docs/production-inventory-checklist.md), and [cutover/rollback gates](docs/production-cutover-runbook.md). No production execution is included.
+
+Owner-confirmed cross-project direction: `fawcett-website-sandbox` → `fawcett-website`; development remains isolated. See the [cross-project approval plan](docs/cross-project-production-plan.md) for Auth/password/session limits, destination collision policy, Storage mapping and additional gates. No live operation is authorized.
