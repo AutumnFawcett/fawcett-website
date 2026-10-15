@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+**Phase 4A decision:** retain `fawcett-website-sandbox` as production. `fawcett-website` is not a destination and remains untouched. Use the [in-place readiness plan](docs/in-place-production-readiness.md), [owner checklist](docs/production-inventory-checklist.md) and [adapter design](docs/in-place-adapter-design.md). Cross-project instructions are deferred; no production operation is authorized.
+
 ## Safe local development
 
 Treat the existing Firebase project as production because it may contain real client records, regardless of its display name. Do not put its configuration, service-account keys, or data into Codex.
@@ -59,5 +61,3 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 Studio client management and production prerequisites: [Phase 2 guide](docs/admin-client-management.md).
 
 Phase 3: [synthetic migration rehearsal](docs/migration-rehearsal.md), [read-only owner inventory](docs/production-inventory-checklist.md), and [cutover/rollback gates](docs/production-cutover-runbook.md). No production execution is included.
-
-Owner-confirmed cross-project direction: `fawcett-website-sandbox` → `fawcett-website`; development remains isolated. See the [cross-project approval plan](docs/cross-project-production-plan.md) for Auth/password/session limits, destination collision policy, Storage mapping and additional gates. No live operation is authorized.

@@ -1,5 +1,7 @@
 # Cross-project production migration — owner review plan
 
+**DEFERRED / SUPERSEDED BY PHASE 4A.** This is historical planning and synthetic evidence, not the current production direction. Retain `fawcett-website-sandbox`; leave `fawcett-website` untouched. Do not execute this document's project-switch, account-transfer or bucket-copy steps. Its test suite and npm command are removed from the active workflow. See [current in-place readiness](in-place-production-readiness.md). The decision/mapping and validation counts below describe the earlier PR only.
+
 **Status: plan and synthetic evidence only. No production operation is authorized
 or performed.** The project identities below were confirmed by the owner, not
 inspected through Codex. Continue treating the source as production regardless of

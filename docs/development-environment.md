@@ -45,3 +45,5 @@ The environment unit suite tests default selection and rejection of live configu
 Storage connects to its emulator to prevent a future Storage call from reaching live infrastructure. Its local signed-in access rules are only for synthetic fixtures, not a proposed production policy. JavaScript source files remain JavaScript; `.mjs` is used for modules shared with Node tooling.
 
 Phase 3: [synthetic migration rehearsal](migration-rehearsal.md), [read-only owner inventory](production-inventory-checklist.md), and [cutover/rollback gates](production-cutover-runbook.md). No production execution is included.
+
+Current production direction: [Phase 4A in-place readiness](in-place-production-readiness.md). Retain `fawcett-website-sandbox`, leave `fawcett-website` untouched, and use only `demo-fawcett-dev` emulators for development. No live operation is authorized.

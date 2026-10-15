@@ -166,3 +166,5 @@ errors occurred. Browser tooling was temporary under `/tmp`; no dependency or lo
 changes were needed. The repository's emulator tests remain reproducible with npm.
 
 Phase 3: [synthetic migration rehearsal](migration-rehearsal.md), [read-only owner inventory](production-inventory-checklist.md), and [cutover/rollback gates](production-cutover-runbook.md). No production execution is included.
+
+Current production direction: [Phase 4A in-place readiness](in-place-production-readiness.md). Retain `fawcett-website-sandbox`, leave `fawcett-website` untouched, and use only `demo-fawcett-dev` emulators for development. No live operation is authorized.

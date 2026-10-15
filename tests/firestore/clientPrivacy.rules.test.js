@@ -22,7 +22,7 @@ before(async () => {
   admin = await import("../../lib/adminFirestore.js");
   portal = await import("../../lib/portalFirestore.js");
   projection = await import("../../lib/portalProjection.mjs");
-  env = await initializeTestEnvironment({ projectId: "demo-fawcett-privacy", firestore: { rules: fs.readFileSync(path.resolve("firestore.rules"), "utf8") } });
+  env = await initializeTestEnvironment({ projectId: "demo-fawcett-dev", firestore: { rules: fs.readFileSync(path.resolve("firestore.rules"), "utf8") } });
 });
 beforeEach(async () => {
   await env.clearFirestore();
