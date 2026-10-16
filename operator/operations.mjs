@@ -3,40 +3,53 @@ import { WRITE_FENCE_PATH, writesOpen } from "../lib/safety/writeFence.mjs";
 import { assertOperator, SOURCE_ROOTS } from "./runtime.mjs";
 import { closedFence } from "./authorization.mjs";
 import { OPERATOR_VERSION, candidate, sealManifest, validateManifest, safeReason, viewPath, policyPath, journalPath, identifier, validateInventory } from "./model.mjs";
-const technicalRoots = new Set(["operatorRuns", "portalRecords", "publicationRecords", "migrationOperatorAuthorizations"]);
+import { NAMESPACE_VERSION, knownCollection, containerPath, frozenDiscovery } from "./namespaces.mjs";
+const technicalRoots = new Set(["operatorRuns", "portalRecords", "publicationRecords", "migrationOperatorAuthorizations", "portalSubmissions"]);
 const rowVersion = snap => ({ created: snap.created, updated: snap.updated });
 const same = (left, right) => fingerprint(left) === fingerprint(right);
-export async function inventory(runtime) {
+export async function inventory(runtime, { signal } = {}) {
+  signal?.throwIfAborted();
   assertOperator(runtime);
   const initial = await runtime.read(WRITE_FENCE_PATH), records = [];
   let fence = null, frozen = false;
   try { fence = closedFence(initial); frozen = true; }
   catch { if (initial.exists && writesOpen(initial.data)) fence = { epoch: initial.data.epoch, controlHash: fingerprint(initial.data), version: initial.updated }; }
-  for (const name of SOURCE_ROOTS) for (const snap of await runtime.scan(name)) {
-    let sourceHash = null, disposition = "supported";
-    try { sourceHash = fingerprint(snap.data); } catch { disposition = "unsupported_type"; }
-    const children = await runtime.children(snap.path);
-    if (children.length) disposition = "unexpanded_subcollections";
-    if (name === "studioClients") disposition = "studio_private";
-    else if (!COLLECTIONS.includes(name)) disposition = "private_business_record";
-    records.push({ path: snap.path, sourceHash, version: rowVersion(snap), disposition, children });
-    requireValue(records.length <= 5000, "inventory_limit_exceeded");
+  const found = await runtime.discover({ signal });
+  const unknown = found.collections.filter(path => !knownCollection(path));
+  const nodes = found.nodes.map(snap => {
+    let hash = null; try { if (snap.exists) hash = fingerprint(snap.data); } catch { /* withheld */ }
+    const parts = snap.path.split("/"), parent = parts.slice(0, -1).join("/");
+    const classification = !knownCollection(parent) ? "unrecognized" : !snap.exists ? containerPath(snap.path) ? "container" : "missing_parent" : !hash ? "withheld" : parts.length === 4 && parts[0] === "portalRecords" ? "destination_review" : parts.length === 2 && COLLECTIONS.includes(parts[0]) && parts[0] !== "studioClients" ? "review_candidate" : "private_only";
+    return { path: snap.path, exists: snap.exists, hash, version: rowVersion(snap), classification };
+  });
+  for (const snap of found.nodes.filter(n => n.exists && n.path.split("/").length === 2 && SOURCE_ROOTS.includes(n.path.split("/")[0]))) {
+    const node = nodes.find(n => n.path === snap.path), name = snap.path.split("/")[0];
+    const children = found.collections.filter(path => path.startsWith(`${snap.path}/`) && path.split("/").length === 3).map(path => path.split("/")[2]);
+    const disposition = children.some(child => !knownCollection(`${snap.path}/${child}`)) ? "unexpanded_subcollections" : !node.hash ? "unsupported_type" : name === "studioClients" ? "studio_private" : !COLLECTIONS.includes(name) ? "private_business_record" : "supported";
+    records.push({ path: snap.path, sourceHash: node.hash, version: node.version, disposition, children });
   }
   records.sort((a, b) => a.path.localeCompare(b.path));
-  const destinations = [];
-  for (const name of COLLECTIONS.filter(name => name !== "studioClients")) {
-    for (const root of ["portalRecords", "publicationRecords"]) for (const snap of await runtime.scan(`${root}/${name}/records`)) {
-      let hash = null; try { hash = fingerprint(snap.data); } catch { /* An opaque destination is a conflict, never overwritten. */ }
-      destinations.push({ path: snap.path, hash, version: rowVersion(snap) });
-      requireValue(destinations.length <= 10000, "inventory_limit_exceeded");
-    }
-  }
-  destinations.sort((a, b) => a.path.localeCompare(b.path));
+  const destinations = nodes.filter(n => n.exists && n.path.split("/").length === 4 && ["portalRecords", "publicationRecords"].includes(n.path.split("/")[0]) && knownCollection(n.path.split("/").slice(0, -1).join("/")))
+    .map(n => ({ path: n.path, hash: n.hash, version: n.version }));
   const roots = (await runtime.roots()).filter(name => !technicalRoots.has(name));
   const unrecognizedRoots = roots.filter(name => !SOURCE_ROOTS.includes(name) && name !== "systemControls");
+  const sourcePaths = new Set(records.map(r => r.path));
+  const issues = nodes.filter(n => ["missing_parent", "unrecognized"].includes(n.classification)).map(n => ({ path: n.path, reason: n.classification }));
+  for (const path of unknown) issues.push({ path, reason: "unexpanded_namespace" });
+  for (const row of destinations) { const [, name, , id] = row.path.split("/"); if (!sourcePaths.has(`${name}/${id}`)) { issues.push({ path: row.path, reason: "orphan_destination" }); nodes.find(n => n.path === row.path).classification = "conflicting"; } }
+  const discovery = { version: NAMESPACE_VERSION, complete: true, collections: found.collections, nodes, issues };
+  // A second full observation rejects interruptions, phantoms and changed source
+  // data/commit versions during discovery; no partial inventory is executable.
+  const verify = await runtime.discover({ signal });
+  const observation = item => ({ collections: item.collections, nodes: item.nodes.map(n => {
+    let hash = null; try { if (n.exists) hash = fingerprint(n.data); } catch { /* commit versions still bind opaque values */ }
+    return { path: n.path, exists: n.exists, hash, version: rowVersion(n) };
+  }) });
+  requireValue(same(observation(found), observation(verify)), "inventory_changed_during_discovery");
   const final = await runtime.read(WRITE_FENCE_PATH);
   requireValue(same(initial, final), "fence_changed_during_inventory");
-  const body = { schemaVersion: 1, syntheticOnly: true, adapterVersion: OPERATOR_VERSION, identity: runtime.identity, frozen, fence, roots, unrecognizedRoots, records, destinations };
+  signal?.throwIfAborted();
+  const body = { schemaVersion: 2, syntheticOnly: true, adapterVersion: OPERATOR_VERSION, identity: runtime.identity, frozen, fence, roots, unrecognizedRoots, records, destinations, discovery };
   return { ...body, snapshotHash: fingerprint(body) };
 }
 export function prepareManifest(snapshot, runId, evidence) {
@@ -127,6 +140,8 @@ function result(manifest, records, extra = {}) {
 async function frozenInventory(runtime, manifest) {
   const current = await inventory(runtime);
   requireValue(same(current.records, manifest.inventory.records) && same(current.roots, manifest.inventory.roots), "frozen_inventory_changed");
+  requireValue(same(frozenDiscovery(current.discovery.nodes, manifest.runId), frozenDiscovery(manifest.inventory.discovery.nodes, manifest.runId)), "frozen_private_inventory_changed");
+  requireValue(current.discovery.issues.length === 0, "discovery_conflicts_require_review");
   const allowed = new Set(manifest.decisions.filter(row => row.state === "approved").flatMap(row => [viewPath(row.path), policyPath(row.path)]));
   requireValue(same(current.destinations.filter(row => !allowed.has(row.path)), manifest.inventory.destinations.filter(row => !allowed.has(row.path))), "unapproved_destination_changed");
 }

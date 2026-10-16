@@ -1,7 +1,8 @@
 import { fingerprint, sourcePath, candidateProjection, requireValue } from "../lib/migration/model.mjs";
 import { portalProjection } from "../lib/portalProjection.mjs";
 import { IDENTITY, SOURCE_ROOTS } from "./runtime.mjs";
-export const OPERATOR_VERSION = "phase6b-v1";
+import { NAMESPACE_VERSION, knownCollection } from "./namespaces.mjs";
+export const OPERATOR_VERSION = "phase9a-v1";
 export const REQUIRED_KEYS = ["clientUid", "conversationId", "projectId", "applicationId", "consultRequestId", "membershipChangeRequestId", "membershipOfferResponseId", "appointmentId", "paymentId", "source", "sourceId", "sourceType", "clientVisible", "entryType"];
 export const safeReason = error => /^[a-z][a-z0-9_]+$/.test(error.message) ? error.message : "operator_assessment_failed";
 export const viewPath = path => { const [name, id] = sourcePath(path); return `portalRecords/${name}/records/${id}`; };
@@ -27,8 +28,8 @@ export function sealManifest(value) {
   return freeze(copy);
 }
 export function validateInventory(snapshot, requireFrozen = true) {
-  exactKeys(snapshot, ["schemaVersion", "syntheticOnly", "adapterVersion", "identity", "frozen", "fence", "roots", "unrecognizedRoots", "records", "destinations", "snapshotHash"]);
-  requireValue(snapshot.schemaVersion === 1 && snapshot.syntheticOnly === true && snapshot.adapterVersion === OPERATOR_VERSION && fingerprint(snapshot.identity) === fingerprint(IDENTITY), "invalid_inventory_scope");
+  exactKeys(snapshot, ["schemaVersion", "syntheticOnly", "adapterVersion", "identity", "frozen", "fence", "roots", "unrecognizedRoots", "records", "destinations", "discovery", "snapshotHash"]);
+  requireValue(snapshot.schemaVersion === 2 && snapshot.syntheticOnly === true && snapshot.adapterVersion === OPERATOR_VERSION && fingerprint(snapshot.identity) === fingerprint(IDENTITY), "invalid_inventory_scope");
   requireValue(!requireFrozen || snapshot.frozen === true && snapshot.fence, "frozen_inventory_required");
   requireValue(Array.isArray(snapshot.unrecognizedRoots) && snapshot.unrecognizedRoots.length === 0, "unrecognized_collections_require_scope_review");
   const { snapshotHash, ...body } = snapshot; digest(snapshotHash); requireValue(fingerprint(body) === snapshotHash, "inventory_digest_changed");
@@ -46,7 +47,18 @@ export function validateInventory(snapshot, requireFrozen = true) {
     if (row.sourceHash !== null) digest(row.sourceHash);
     exactKeys(row.version, ["created", "updated"]); version(row.version.created); version(row.version.updated);
   }
-  requireValue(snapshot.records.every(row => row.children.length === 0), "unexpanded_subcollections_require_scope_review");
+  requireValue(snapshot.records.every(row => row.children.every(child => knownCollection(`${row.path}/${child}`))), "unexpanded_subcollections_require_scope_review");
+  exactKeys(snapshot.discovery, ["version", "complete", "collections", "nodes", "issues"]);
+  requireValue(snapshot.discovery.version === NAMESPACE_VERSION && snapshot.discovery.complete === true && Array.isArray(snapshot.discovery.nodes) && Array.isArray(snapshot.discovery.collections) && snapshot.discovery.collections.every(knownCollection) && Array.isArray(snapshot.discovery.issues) && snapshot.discovery.issues.length === 0, "discovery_conflicts_require_scope_review");
+  requireValue(snapshot.discovery.nodes.length <= 5000 && new Set(snapshot.discovery.nodes.map(n => n.path)).size === snapshot.discovery.nodes.length, "invalid_discovery_nodes");
+  for (const node of snapshot.discovery.nodes) {
+    exactKeys(node, ["path", "exists", "hash", "version", "classification"]);
+    requireValue(typeof node.path === "string" && node.path.split("/").length % 2 === 0 && knownCollection(node.path.split("/").slice(0, -1).join("/")) && typeof node.exists === "boolean" && ["container", "review_candidate", "destination_review", "private_only", "withheld"].includes(node.classification), "invalid_discovery_node");
+    if (node.hash !== null) digest(node.hash);
+    exactKeys(node.version, ["created", "updated"]);
+    if (node.exists) { version(node.version.created); version(node.version.updated); }
+    else requireValue(node.classification === "container" && node.hash === null && node.version.created === null && node.version.updated === null, "invalid_missing_container");
+  }
   requireValue(Array.isArray(snapshot.destinations) && snapshot.destinations.length <= 10000 && new Set(snapshot.destinations.map(row => row.path)).size === snapshot.destinations.length, "invalid_destination_inventory");
   for (const row of snapshot.destinations) {
     exactKeys(row, ["path", "hash", "version"]);

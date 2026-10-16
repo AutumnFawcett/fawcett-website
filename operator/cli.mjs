@@ -4,6 +4,7 @@ import { createSyntheticOperator, PRODUCTION_PROJECT } from "./runtime.mjs";
 import { inventory, prepareManifest, prepareApproval, prepareAuthorization, reconcile, execute } from "./operations.mjs";
 import { safeReason } from "./model.mjs";
 import { requireValue } from "../lib/migration/model.mjs";
+import { inventorySummary, reconciliationSummary } from "./reports.mjs";
 const [operation, ...args] = process.argv.slice(2), options = {};
 const names = ["--project", "--database", "--report", "--inventory", "--manifest", "--evidence", "--run-id", "--path", "--fields", "--grant-id", "--operator-token-file", "--limit", "--for-operation"];
 let output, runtime;
@@ -16,13 +17,13 @@ async function artifact(path, token = false) {
   } finally { await file.close(); }
 }
 try {
-  requireValue(["inventory", "prepare-manifest", "prepare-approval", "prepare-authorization", "reconcile", "apply", "withdraw"].includes(operation), "unsupported_operator_operation");
+  requireValue(["inventory", "prepare-manifest", "prepare-approval", "prepare-authorization", "reconcile", "apply", "withdraw", "inventory-summary", "reconcile-summary"].includes(operation), "unsupported_operator_operation");
   for (let i = 0; i < args.length; i += 2) {
     requireValue(names.includes(args[i]) && args[i + 1] && !Object.hasOwn(options, args[i]), "unexpected_or_duplicate_option"); options[args[i]] = args[i + 1];
   }
   const common = ["--project", "--database", "--report"];
   const required = {
-    inventory: [], "prepare-manifest": ["--inventory", "--evidence", "--run-id"],
+    "inventory-summary": [], "reconcile-summary": ["--manifest"], inventory: [], "prepare-manifest": ["--inventory", "--evidence", "--run-id"],
     "prepare-approval": ["--inventory", "--path", "--fields"], "prepare-authorization": ["--manifest", "--for-operation"],
     reconcile: ["--manifest"], apply: ["--manifest", "--grant-id", "--operator-token-file"], withdraw: ["--manifest", "--grant-id", "--operator-token-file"],
   }[operation];
@@ -36,13 +37,17 @@ try {
   // Reserve and sync a new protected report BEFORE any possible write.
   output = await fs.open(options["--report"], "wx", 0o600); await output.sync();
   let report;
-  if (operation === "inventory") report = await inventory(runtime);
+  if (operation === "inventory-summary") report = inventorySummary(await inventory(runtime));
+  else if (operation === "reconcile-summary") report = reconciliationSummary(await reconcile(runtime, await artifact(options["--manifest"])));
+  else if (operation === "inventory") report = await inventory(runtime);
   else if (operation === "prepare-manifest") report = prepareManifest(await artifact(options["--inventory"]), options["--run-id"], await artifact(options["--evidence"]));
   else if (operation === "prepare-approval") report = await prepareApproval(runtime, await artifact(options["--inventory"]), options["--path"], JSON.parse(options["--fields"]));
   else if (operation === "prepare-authorization") report = await prepareAuthorization(runtime, await artifact(options["--manifest"]), options["--for-operation"]);
   else if (operation === "reconcile") report = await reconcile(runtime, await artifact(options["--manifest"]));
   else report = await execute(runtime, await artifact(options["--manifest"]), { operation: operation === "apply" ? "apply" : "withdraw", grantId: options["--grant-id"], ...(options["--limit"] ? { limit: Number(options["--limit"]) } : {}) });
-  await output.writeFile(`${JSON.stringify(report, null, 2)}\n`); await output.sync();
+  const serialized = `${JSON.stringify(report, null, 2)}\n`;
+  requireValue(Buffer.byteLength(serialized) <= 4194304, "report_artifact_limit_exceeded");
+  await output.writeFile(serialized); await output.sync();
   console.log(JSON.stringify({ syntheticOnly: true, operation, ...(report.counts ? { counts: report.counts } : { prepared: true }) }));
   if (report.stopped || report.counts?.error) process.exitCode = 1;
 } catch (error) {
