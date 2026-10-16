@@ -13,6 +13,18 @@ adapter. All operations below involving real infrastructure require new explicit
 owner approval and an authorized operator outside Codex. Keep live data, manifests,
 backup contents and credentials out of Codex/GitHub.
 
+## Current Phase 9A release contract
+
+The [launch inventory and cutover contract](launch-inventory-and-cutover-contract.md)
+is authoritative for current namespace coverage, query/index requirements, recovery
+status and release gates. Merged #41–#45 implement application/rules write fences,
+durable publication review, private studio payments and transactional scheduling.
+They are development capabilities, not proof of deployed production enforcement.
+The October 15, 2026 Firestore backup restoration completed; integrity verification
+and separate Auth/Storage/configuration recovery evidence still require owner signoff.
+The production operator remains hard-disabled. No production index manifest is
+provided; verify launch-queries-v1 against actual service indexes/exemptions.
+
 ## Repository evidence and blockers
 
 The earlier Phase 3 baseline contains PR #32 (demo isolation), #33 (private originals
@@ -25,8 +37,9 @@ admin edit guard still withholds legacy sources with no projection.
 Checked-in `firebase.json` is a deployment-capable rules configuration, while
 `firebase.emulators.json` is the local test configuration. **Neither was changed,
 and no deploy command is part of this rehearsal.** No production index manifest,
-production inventory, protected backup, approved migration manifest, executable
-write fence or production migration adapter has been verified/provided. AGENTS.md
+verified production inventory, approved production manifest or executable production
+migration adapter has been provided. An executable write fence IS implemented in
+the candidate; its actual production enforcement remains unverified. AGENTS.md
 mentions Next 16.2.7; package/lock currently use Next 16.3.3. Validation uses the
 installed locked toolchain, JavaScript, npm and App Router.
 
@@ -106,7 +119,8 @@ manifest/backup reference, timestamp/timezone and a private evidence location.
 2. Enforce a write pause covering **direct Firestore SDK/REST writes from cached
    clients as well as the website UI**. A maintenance page alone is not a write
    fence. A separately reviewed temporary database policy/server-writer pause may
-   be needed; no such policy is implemented or deployed in this PR. Pause jobs,
+   be needed; the candidate implements the fence, but live enforcement is unverified.
+   Pause jobs,
    imports and external writers; control Admin SDK writers independently because
    they bypass Firestore rules. Do not delete/disable client accounts or weaken
    privacy to implement the pause. If a safe fence is unavailable, stop.
@@ -140,7 +154,8 @@ manifest/backup reference, timestamp/timezone and a private evidence location.
    messaging writes and source/projection pairing again. Reconcile late writes or
    offline retries; do not blindly rerun an old approved snapshot over live data.
    Retain monitoring, evidence and rollback operators for the agreed observation
-   window. Payments/notifications remain in their prior approved state.
+   window. Founder/tattoo website payments, notifications, verification delivery, subscriptions
+   and automatic booking remain disabled throughout this cutover.
 
 ## Post-cutover verification matrix
 
@@ -184,10 +199,11 @@ Keep/reinstate the reviewed write fence and maintenance first; record the stop p
 
 ## Remaining risks requiring owner resolution
 
-Live project/policy/data populations, backups/restore, index readiness, external
+Restore completion is owner-confirmed; integrity and separate Auth/Storage/configuration
+recovery checks remain outstanding. Live project/policy/data populations, index readiness, external
 writers/Storage permissions, provider settings, and real financial/ownership
-semantics were not inspected. The maintenance fence and production adapter are
-unimplemented blockers. Human review can miss sensitive free text; keyword checks
+semantics were not inspected. Production installation/verification of the implemented maintenance fence and a
+separately approved production execution adapter remain blockers. Human review can miss sensitive free text; keyword checks
 are incomplete and may over-withhold. Prior disclosures/caches cannot be undone.
 Admin SDK operators can bypass rules/journals; restrict and monitor operational
 privileges. Studio account linking, legacy duplicate review/migration and correcting

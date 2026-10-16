@@ -2,7 +2,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { createRehearsalRuntime, assertRuntime } from "../lib/migration/runtime.mjs";
 import { COLLECTIONS, requireValue } from "../lib/migration/model.mjs";
 const trusted = new WeakSet();
-export const SOURCE_ROOTS = Object.freeze([...COLLECTIONS, "adminUsers", "paymentOrders", "paymentTransactions", "paymentWebhookEvents", "founderProfiles", "founderContributions", "founderCounters", "paymentCheckoutRequests", "paymentCheckoutRateLimits", "studioConsultAssociations", "studioClientDuplicateLocks", "authVerificationRateLimits", "notificationConfiguration", "notificationScanCursors", "notificationMessageReceipts", "notificationQueue", "notificationWebhookEvents", "notificationSuppressions", "migrationRuns"]);
+import { SOURCE_ROOTS } from "./namespaces.mjs";
+export { SOURCE_ROOTS };
 export const PRODUCTION_PROJECT = "fawcett-website-sandbox";
 export const IDENTITY = Object.freeze({ projectId: "demo-fawcett-dev", databaseId: "(default)", intendedProductionProject: PRODUCTION_PROJECT });
 export function createProductionOperator() {
@@ -37,6 +38,22 @@ export function createSyntheticOperator(options) {
   const runtime = Object.freeze({
     identity: IDENTITY,
     async read(path) { return snapshot(await ref(path).get()); },
+    async discover({ signal } = {}) {
+      signal?.throwIfAborted(); check(); const nodes = [], collections = [];
+      async function visit(collection, depth) {
+        signal?.throwIfAborted(); check(); requireValue(depth <= 5, "inventory_depth_limit_exceeded");
+        collections.push(collection.path); requireValue(collections.length <= 5000, "inventory_collection_limit_exceeded");
+        // listDocuments includes missing document parents, unlike a query scan.
+        const refs = await collection.listDocuments(); requireValue(refs.length <= 5000, "inventory_limit_exceeded");
+        for (const doc of refs) {
+          signal?.throwIfAborted(); check(); const snap = await doc.get();
+          nodes.push(snapshot(snap)); requireValue(nodes.length <= 5000, "inventory_limit_exceeded");
+          for (const child of await doc.listCollections()) await visit(child, depth + 1);
+        }
+      }
+      for (const root of await backend.firestore.listCollections()) await visit(root, 1);
+      return { nodes: nodes.sort((a, b) => a.path.localeCompare(b.path)), collections: collections.sort() };
+    },
     async roots() { check(); return (await backend.firestore.listCollections()).map(ref => ref.id).sort(); },
     async scan(name) {
       check(); requireValue(SOURCE_ROOTS.includes(name) || /^(portalRecords|publicationRecords)\/[A-Za-z]+\/records$/.test(name) && COLLECTIONS.includes(name.split("/")[1]), "operator_scan_denied");

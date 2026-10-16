@@ -170,7 +170,7 @@ test("a new closed epoch permits separately authorized withdrawal but never resu
 });
 test("capability adapter cannot write originals, roles, authorizations, payments or unapproved projections", async () => {
   const manifest = await approved(), context = { manifest, grantId: "synthetic-apply", operation: "apply" };
-  for (const path of ["clients/forged", "adminUsers/forged", "migrationOperatorAuthorizations/forged", "payments/forged", "portalRecords/projects/records/unapproved"]) await assert.rejects(runtime.transaction(context, tx => tx.set(path, { clientUid: OWNER })), /write_path_denied/);
+  for (const path of ["clients/forged", "adminUsers/forged", "migrationOperatorAuthorizations/forged", "payments/forged", "studioPayments/forged", "scheduleReservations/forged", "appointments/forged", "portalRecords/studioPayments/records/forged", "portalRecords/projects/records/unapproved"]) await assert.rejects(runtime.transaction(context, tx => tx.set(path, { clientUid: OWNER })), /write_path_denied/);
   await assert.rejects(runtime.transaction(context, tx => tx.create(viewPath(manifest.decisions.find(row => row.state === "approved").path), { clientUid: OWNER, body: "Injected content" })), /reviewed_candidate_write_required/); await noViews();
 });
 test("subcollections and unsupported SDK types are disclosed as unexpanded/withheld, not silently approved", async () => {
@@ -193,6 +193,15 @@ test("CLI enforces private new reports, exact identity and rejects live executio
   try {
     const output = path.join(dir, "inventory.json"), common = ["--project", "demo-fawcett-dev", "--database", "(default)", "--report", output];
     const first = run(["inventory", ...common]); assert.equal(first.status, 0, first.stderr); assert.equal((await fs.stat(output)).mode & 0o077, 0); assert.equal(JSON.parse(await fs.readFile(output)).records.length, 26);
+    const manifestFile = path.join(dir, "reviewed-synthetic.json");
+    await fs.writeFile(manifestFile, JSON.stringify(await reviewed(runtime)), { mode: 0o600 });
+    for (const operation of ["inventory-summary", "reconcile-summary"]) {
+      const outputFile = path.join(dir, `${operation}.json`);
+      const result = run([operation, "--project", "demo-fawcett-dev", "--database", "(default)", "--report", outputFile, ...(operation === "reconcile-summary" ? ["--manifest", manifestFile] : [])]);
+      assert.equal(result.status, 0, result.stderr); assert.equal((await fs.stat(outputFile)).mode & 0o077, 0);
+      const summary = JSON.parse(await fs.readFile(outputFile)); assert.match(summary.kind, /aggregate$/);
+      assert.doesNotMatch(JSON.stringify(summary), /rehearsal|clientUid|sourceHash|@|PRIVATE_SYNTHETIC/);
+    }
     assert.equal(run(["inventory", ...common]).status, 1); assert.equal(run(["inventory", ...common, "--production", "true"]).status, 1);
     assert.equal(run(["inventory", "--project", "fawcett-website-sandbox", "--database", "(default)", "--report", path.join(dir, "forbidden.json")]).status, 1);
     await assert.rejects(fs.stat(path.join(dir, "forbidden.json")));
@@ -339,4 +348,105 @@ test("unknown fields in a pre-existing withheld policy are not silently overwrit
   assert.ok(report.records.some(row => row.reason === "unexpected_publication_policy_shape"));
   assert.equal((await raw.firestore.doc(policyPath(path)).get()).data().privateLegacyNote, "Synthetic private metadata");
   assert.equal((await raw.firestore.collection(`operatorRuns/${manifest.runId}/records`).get()).size, 0);
+});
+
+test("launch discovery covers new private roots and their audits without publication rights", async () => {
+  const roots = ["studioPayments", "studioPaymentRequests", "studioPaymentReferenceLocks", "studioPaymentRateLimits", "studioVerifiedAccountLinks", "studioProjectAssociations", "schedulingConfig", "schedulingControls", "schedulingRequests", "scheduleReservations", "scheduleLegacySnapshots", "schedulingPolicyAudit", "schedulingHolidayPolicies", "adminConversationReceipts"];
+  const paths = roots.map(root => `${root}/synthetic-private`);
+  paths.push("studioPayments/synthetic-private/audit/created", "paymentOrders/synthetic-order/audit/created", "studioClients/synthetic-studio/audit/created", "appointments/rehearsal-appointment/scheduleAudit/created", "schedulingHolidayPolicies/synthetic-private/audit/created");
+  // Create parents explicitly; missing parents are tested separately.
+  for (const path of ["paymentOrders/synthetic-order", "studioClients/synthetic-studio", ...paths]) await raw.firestore.doc(path).set({ amountCents: 12001, deltaCents: -301, timestamp: new Date("2026-01-01T00:00:00Z"), notes: "PRIVATE_SYNTHETIC_NESTED" });
+  const before = {};
+  for (const path of paths) { const s = await raw.firestore.doc(path).get(); before[path] = fingerprint({ data: s.data(), created: s.createTime, updated: s.updateTime }); }
+  const snapshot = await inventory(runtime);
+  assert.equal(snapshot.discovery.complete, true); assert.deepEqual(snapshot.discovery.issues, []);
+  for (const path of paths) assert.equal(snapshot.discovery.nodes.find(n => n.path === path).classification, "private_only");
+  await assert.rejects(prepareApproval(runtime, snapshot, paths[0], ["amountCents"]), /unsupported_source_withheld/);
+  const manifest = await reviewed(runtime); await grant(raw, runtime, manifest); await apply(manifest);
+  for (const path of paths) { const s = await raw.firestore.doc(path).get(); assert.equal(fingerprint({ data: s.data(), created: s.createTime, updated: s.updateTime }), before[path]); }
+  assert.doesNotMatch(JSON.stringify(snapshot), /PRIVATE_SYNTHETIC_NESTED/);
+});
+test("missing source parents with private descendants are discovered and block approval", async () => {
+  await raw.firestore.doc("studioClients/missing-parent/audit/entry").set({ privateNote: "PRIVATE_SYNTHETIC" });
+  const snapshot = await inventory(runtime);
+  assert.ok(snapshot.discovery.nodes.some(n => n.path === "studioClients/missing-parent" && n.classification === "missing_parent"));
+  assert.ok(snapshot.discovery.nodes.some(n => n.path.endsWith("/audit/entry")));
+  await assert.rejects(prepareApproval(runtime, snapshot, `clients/${OWNER}`, ["clientUid"]), /discovery_conflicts/);
+});
+test("missing namespace containers are expected but orphan destinations remain conflicts", async () => {
+  await raw.firestore.doc(`portalRecords/clients/records/${OWNER}`).set({ clientUid: OWNER });
+  let snapshot = await inventory(runtime); assert.deepEqual(snapshot.discovery.issues, []);
+  assert.equal(snapshot.discovery.nodes.find(n => n.path === `portalRecords/clients/records/${OWNER}`).classification, "destination_review");
+  assert.equal(snapshot.discovery.nodes.find(n => n.path === "portalRecords/clients").classification, "container");
+  await raw.firestore.doc("portalRecords/projects/records/synthetic-orphan").set({ clientUid: OWNER });
+  snapshot = await inventory(runtime); assert.ok(snapshot.discovery.issues.some(i => i.reason === "orphan_destination"));
+});
+test("publication histories and receipt children are private and compared across reconciliation", async () => {
+  await raw.firestore.doc("publicationRecords/projects/records/rehearsal-project").set({ state: "withheld", schemaVersion: 1 });
+  const audit = "publicationRecords/projects/records/rehearsal-project/history/synthetic-history";
+  await raw.firestore.doc(audit).set({ actorUid: identities.reviewerUid });
+  await raw.firestore.doc(`portalSubmissions/${OWNER}/requests/synthetic-receipt`).set({ epoch: "synthetic" });
+  const manifest = await reviewed(runtime); assert.equal(manifest.inventory.discovery.nodes.find(n => n.path === audit).classification, "private_only");
+  await raw.firestore.doc(audit).update({ actorUid: "changed-synthetic" });
+  const result = await reconcile(runtime, manifest); assert.ok(result.counts.error); assert.equal(result.stopped, true);
+});
+test("unknown descendants and unknown projection namespaces cannot hide under known roots", async () => {
+  await raw.firestore.doc("studioPayments/known").set({ amountCents: 100 });
+  await raw.firestore.doc("studioPayments/known/unreviewed/hidden").set({ secret: "PRIVATE_SYNTHETIC" });
+  await raw.firestore.doc("portalRecords/unknownType/records/hidden").set({ clientUid: OWNER });
+  const snapshot = await inventory(runtime);
+  assert.ok(snapshot.discovery.issues.some(i => i.path.includes("unreviewed")));
+  assert.ok(snapshot.discovery.issues.some(i => i.path.includes("unknownType")));
+  await assert.rejects(prepareApproval(runtime, snapshot, `clients/${OWNER}`, ["clientUid"]), /scope_review/);
+});
+test("aborted inventory produces no executable partial snapshot and restarts cleanly", async () => {
+  const before = await originals(), controller = new AbortController();
+  const interrupted = inventory(runtime, { signal: controller.signal }); controller.abort();
+  await assert.rejects(interrupted, { name: "AbortError" });
+  const snapshot = await inventory(runtime); assert.equal(snapshot.discovery.complete, true);
+  assert.deepEqual(await originals(), before); await noViews();
+});
+test("aggregate inventory and reconciliation reports disclose no paths, identities, hashes or notes", async () => {
+  const { inventorySummary, reconciliationSummary } = await import("../../operator/reports.mjs");
+  const snapshot = await inventory(runtime), summary = inventorySummary(snapshot);
+  assert.equal(summary.reviewCandidates > 0, true); assert.equal(summary.stopped, false);
+  const manifest = await reviewed(runtime), report = reconciliationSummary(await reconcile(runtime, manifest));
+  for (const value of [summary, report]) assert.doesNotMatch(JSON.stringify(value), /rehearsal|operator-owner|operator-reviewer|operator-runner|clientUid|sourceHash|path|@|PRIVATE_SYNTHETIC/);
+  assert.equal(report.counts.eligible, 2);
+});
+test("late nested financial audit edits stop resume without changing originals", async () => {
+  await raw.firestore.doc("studioPayments/synthetic-charge").set({ amountCents: 12345, currency: "CAD" });
+  const audit = "studioPayments/synthetic-charge/audit/created";
+  await raw.firestore.doc(audit).set({ actorUid: identities.ownerUid });
+  const manifest = await approved(); await apply(manifest, "synthetic-apply", { limit: 1 });
+  await raw.firestore.doc(audit).update({ actorUid: identities.reviewerUid });
+  const result = await apply(manifest); assert.equal(result.stopped, true); assert.ok(result.counts.error);
+  assert.equal((await raw.firestore.doc("studioPayments/synthetic-charge").get()).data().amountCents, 12345);
+});
+test("nested audit inventory includes every record beyond the old query page boundary", async () => {
+  await raw.firestore.doc("studioPayments/paged-synthetic").set({ amountCents: 10501 });
+  const batch = raw.firestore.batch();
+  for (let i = 0; i < 105; i++) batch.set(raw.firestore.doc(`studioPayments/paged-synthetic/audit/entry-${String(i).padStart(3, "0")}`), { privateNote: "PRIVATE_SYNTHETIC", amountCents: i });
+  await batch.commit();
+  const snapshot = await inventory(runtime);
+  assert.equal(snapshot.discovery.nodes.filter(n => n.path.startsWith("studioPayments/paged-synthetic/audit/")).length, 105);
+  assert.deepEqual(snapshot.discovery.issues, []);
+});
+test("unexpanded excessive nesting stops inventory instead of issuing partial completeness", async () => {
+  await raw.firestore.doc("projects/deep/private/a/private/b/private/c/private/d/private/e").set({ note: "PRIVATE_SYNTHETIC" });
+  await assert.rejects(inventory(runtime), /inventory_depth_limit_exceeded/);
+  await noViews();
+});
+test("real namespace container data cannot change unnoticed during reconciliation", async () => {
+  await raw.firestore.doc("publicationRecords/projects").set({ privateMarker: "synthetic-original" });
+  const manifest = await reviewed(runtime);
+  await raw.firestore.doc("publicationRecords/projects").update({ privateMarker: "synthetic-changed" });
+  assert.ok((await reconcile(runtime, manifest)).counts.error);
+});
+test("unrelated historical operator journals remain frozen even while the current run may progress", async () => {
+  await raw.firestore.doc("operatorRuns/historical-synthetic").set({ state: "private-old-run" });
+  await raw.firestore.doc("operatorRuns/historical-synthetic/records/journal").set({ state: "committed" });
+  const manifest = await reviewed(runtime);
+  await raw.firestore.doc("operatorRuns/historical-synthetic/records/journal").update({ state: "changed" });
+  assert.ok((await reconcile(runtime, manifest)).counts.error);
 });

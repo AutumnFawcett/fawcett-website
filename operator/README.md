@@ -29,3 +29,5 @@ remaining risks and separate production activation requirements.
 Tests: `npm run test:operator`. It is also part of `npm test`. These tests clear
 fictional emulator records; do not run suites concurrently with interactive work.
 The development fixture bootstrap lives outside this adapter and issues no grant.
+
+Phase 9A: [namespace, aggregate report, query/index and cutover contract](../docs/launch-inventory-and-cutover-contract.md). Inventory schema 2 / adapter phase9a-v1 require fresh reviewed artifacts; no production activation. New read-only CLI operations: inventory-summary and reconcile-summary.
