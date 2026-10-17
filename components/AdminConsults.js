@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const consultStatusOptions = [
   { value: "new", label: "New" },
@@ -104,7 +105,8 @@ function getInboxPayload(nextInbox) {
   };
 }
 
-export default function AdminConsults() {
+function AdminConsults() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -196,7 +198,7 @@ export default function AdminConsults() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -221,7 +223,7 @@ export default function AdminConsults() {
     );
 
     return () => unsubscribe();
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectConsult(consult) {
     setSelectedConsultId(consult.id);
@@ -980,3 +982,5 @@ export default function AdminConsults() {
     </main>
   );
 }
+
+export default withFirebase(AdminConsults);

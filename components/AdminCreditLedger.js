@@ -15,7 +15,8 @@ import {
   onSnapshot,
   query,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 function formatValue(value) {
   if (value === true) return "Yes";
@@ -107,7 +108,8 @@ function getCreditLabel(payment) {
   return "No Credit Change";
 }
 
-export default function AdminCreditLedger() {
+function AdminCreditLedger() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -303,7 +305,7 @@ export default function AdminCreditLedger() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -348,7 +350,7 @@ export default function AdminCreditLedger() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -749,3 +751,5 @@ export default function AdminCreditLedger() {
     </main>
   );
 }
+
+export default withFirebase(AdminCreditLedger);

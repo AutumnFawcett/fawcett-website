@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const timelineTypeOptions = [
   { value: "general_note", label: "General Note" },
@@ -115,7 +116,8 @@ function getTimelineStatusClass(status) {
   return "timeline-status-pill";
 }
 
-export default function AdminProjectTimeline() {
+function AdminProjectTimeline() {
+  const { auth, db } = getFirebaseClient();
 const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -363,7 +365,7 @@ const router = useRouter();
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -404,7 +406,7 @@ const router = useRouter();
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleClientChange(nextClientKey) {
     setSelectedClientKey(nextClientKey);
@@ -1057,3 +1059,5 @@ const router = useRouter();
     </main>
   );
 }
+
+export default withFirebase(AdminProjectTimeline);

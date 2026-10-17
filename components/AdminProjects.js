@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const projectStatusOptions = [
   { value: "review", label: "Review" },
@@ -145,7 +146,8 @@ function getTimelineTypeLabel(type) {
   return timelineTypeOptions.find((option) => option.value === type)?.label || formatValue(type);
 }
 
-export default function AdminProjects() {
+function AdminProjects() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -320,7 +322,7 @@ export default function AdminProjects() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -358,7 +360,7 @@ export default function AdminProjects() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectProject(project) {
     setSelectedProjectId(project.id);
@@ -1107,3 +1109,5 @@ export default function AdminProjects() {
     </main>
   );
 }
+
+export default withFirebase(AdminProjects);

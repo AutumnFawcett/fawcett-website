@@ -19,7 +19,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const inboxes = [
   {
@@ -60,7 +61,8 @@ function formatDate(timestamp) {
   });
 }
 
-export default function AdminInbox() {
+function AdminInbox() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -110,7 +112,7 @@ export default function AdminInbox() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
 useEffect(() => {
   if (!user || !isAdmin) return;
@@ -144,7 +146,7 @@ useEffect(() => {
   );
 
   return () => unsubscribe();
-}, [activeInbox, user, isAdmin]);
+}, [activeInbox, user, isAdmin, db]);
 useEffect(() => {
   if (!selectedConversation) return;
 
@@ -176,7 +178,7 @@ useEffect(() => {
   );
 
   return () => unsubscribe();
-}, [selectedConversation]);
+}, [db, selectedConversation]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -605,3 +607,5 @@ useEffect(() => {
     </main>
   );
 }
+
+export default withFirebase(AdminInbox);

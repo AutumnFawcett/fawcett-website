@@ -37,7 +37,9 @@ const whatToInclude = [
   "Health, allergy, skin, or cover-up details that may affect the project",
 ];
 
-export default function ConsultPage() {
+export default async function ConsultPage({ searchParams }) {
+  const params = await searchParams;
+  const initialPlan = typeof params?.plan === "string" ? params.plan : "";
   return (
     <main className="min-h-screen bg-black text-white">
       <section className="border-b border-white/10">
@@ -146,7 +148,7 @@ export default function ConsultPage() {
           </p>
 
           <div className="mt-8">
-            <ConsultRequestForm />
+            <ConsultRequestForm key={initialPlan} initialPlan={initialPlan} />
           </div>
         </div>
       </section>

@@ -14,7 +14,8 @@ import {
   collection,
   serverTimestamp,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const initialForm = {
   fullName: "",
@@ -58,7 +59,8 @@ const initialForm = {
   acknowledgementContact: false,
 };
 
-export default function MembershipApplicationForm() {
+function MembershipApplicationForm() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -86,7 +88,7 @@ export default function MembershipApplicationForm() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   const allAcknowledgementsChecked = useMemo(() => {
     return (
@@ -895,3 +897,6 @@ export default function MembershipApplicationForm() {
     </form>
   );
 }
+
+
+export default withFirebase(MembershipApplicationForm);

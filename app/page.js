@@ -66,16 +66,16 @@ export default function HomePage() {
         <a href="/tattoo-project-membership" className="credit-marquee-track">
           <div className="credit-marquee-content">
             <span>Interested in Tattoo Credit?</span>
-            <span>Apply for the Tattoo Credit Waitlist</span>
-            <span>Piece • Collector • Sleeve</span>
-            <span>Build tattoo credit toward an approved project</span>
+            <span>Explore Tattoo Project Payment Plans</span>
+            <span>Starter • Builder • Commitment</span>
+            <span>Request a plan • No payment collected</span>
           </div>
 
           <div className="credit-marquee-content">
             <span>Interested in Tattoo Credit?</span>
-            <span>Apply for the Tattoo Credit Waitlist</span>
-            <span>Piece • Collector • Sleeve</span>
-            <span>Build tattoo credit toward an approved project</span>
+            <span>Explore Tattoo Project Payment Plans</span>
+            <span>Starter • Builder • Commitment</span>
+            <span>Request a plan • No payment collected</span>
           </div>
         </a>
       </section>
@@ -224,24 +224,12 @@ export default function HomePage() {
 
 <section id="membership" className="section membership-preview-section">
     <div className="membership-preview-card">
-  <div className="section-heading">
-    <p className="eyebrow">INTERESTED IN TATTOO CREDIT?</p>
-  </div>
-
-      <div>
-
-      <p>
-        The Tattoo Project Membership Program is being designed for approved
-        clients who want to build tattoo credit toward a larger custom project
-        over time.
-      </p>
-
+      <p className="eyebrow">Tattoo Project Payment Plans</p>
+      <h2>Big tattoo ideas. A plan to build toward them.</h2>
+      <p>Explore Starter, Builder and Commitment plans, from $500 initial + $150/month. Payments are intended to become dollar-for-dollar Fawcett Studio Credit, subject to final disclosed program terms.</p>
+      <p>Request a plan through a consultation. No payments collected, recurring subscription activated or bookings guaranteed.</p>
+      <a className="button button-primary" href="/tattoo-project-membership">Explore Payment Plans</a>
     </div>
-
-    <a className="button button-primary" href="/tattoo-project-membership">
-      Apply for the Waitlist
-    </a>
-  </div>
 </section>
  
 

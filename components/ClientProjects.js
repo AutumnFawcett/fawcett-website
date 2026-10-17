@@ -9,7 +9,8 @@ import {
   signOut,
 } from "firebase/auth";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 function timestampToMillis(timestamp) {
   if (!timestamp) return 0;
@@ -97,7 +98,8 @@ function getProjectStatusClass(status) {
   return "client-project-pill";
 }
 
-export default function ClientProjects() {
+function ClientProjects() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -254,7 +256,7 @@ export default function ClientProjects() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     if (!user) return;
@@ -321,7 +323,7 @@ export default function ClientProjects() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user]);
+  }, [db, user]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -707,3 +709,5 @@ export default function ClientProjects() {
     </main>
   );
 }
+
+export default withFirebase(ClientProjects);

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const dashboardCards = [
   {
@@ -128,7 +129,8 @@ const publicLinks = [
   },
 ];
 
-export default function AdminDashboard() {
+function AdminDashboard() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -173,7 +175,7 @@ export default function AdminDashboard() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [auth, db, router]);
 
   async function handleLogout() {
     await signOut(auth);
@@ -356,3 +358,5 @@ export default function AdminDashboard() {
     </main>
   );
 }
+
+export default withFirebase(AdminDashboard);

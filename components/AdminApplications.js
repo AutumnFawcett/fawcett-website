@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const statusOptions = [
   { value: "new", label: "New" },
@@ -117,7 +118,8 @@ function getInboxPayload(nextInbox) {
   };
 }
 
-export default function AdminApplications() {
+function AdminApplications() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -211,7 +213,7 @@ export default function AdminApplications() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -236,7 +238,7 @@ export default function AdminApplications() {
     );
 
     return () => unsubscribe();
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectApplication(application) {
     setSelectedApplicationId(application.id);
@@ -1033,3 +1035,5 @@ export default function AdminApplications() {
     </main>
   );
 }
+
+export default withFirebase(AdminApplications);

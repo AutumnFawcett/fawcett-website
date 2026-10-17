@@ -12,7 +12,8 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const portalCards = [
   {
@@ -59,7 +60,8 @@ const portalCards = [
   },
 ];
 
-export default function ClientDashboard() {
+function ClientDashboard() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -177,7 +179,7 @@ export default function ClientDashboard() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [auth, db, router]);
 
   async function handleLogout() {
     await signOut(auth);
@@ -377,3 +379,5 @@ export default function ClientDashboard() {
     </main>
   );
 }
+
+export default withFirebase(ClientDashboard);
