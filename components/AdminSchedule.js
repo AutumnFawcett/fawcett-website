@@ -51,6 +51,21 @@ const artistOptions = [
   { value: "autumn", label: "Autumn", artistId: "artist_autumn" },
 ];
 
+
+const scheduleAdminLinks = [
+  { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin/inbox", label: "Inbox" },
+  { href: "/admin/clients", label: "Clients" },
+  { href: "/admin/consults", label: "Consults" },
+  { href: "/admin/projects", label: "Projects" },
+  { href: "/admin/project-timeline", label: "Timeline" },
+  { href: "/admin/payments", label: "Payments" },
+  { href: "/admin/credit-ledger", label: "Credit Ledger" },
+  { href: "/admin/membership-offers", label: "Membership Offers" },
+  { href: "/admin/membership-requests", label: "Membership Requests" },
+  { href: "/admin/membership-offer-responses", label: "Offer Responses" },
+];
+
 function getTodayInputValue() {
   return edmontonToday();
 }
@@ -392,6 +407,11 @@ function AdminSchedule() {
     }
   }
 
+  async function handleLogout() {
+    await signOut(auth);
+    router.push("/tattoo-portal");
+  }
+
   async function handleLogin(event) {
     event.preventDefault();
     setAuthError("");
@@ -640,7 +660,7 @@ function AdminSchedule() {
   }
 
   return (
-    <main className="admin-page">
+    <main className="admin-page schedule-page">
       <section className="admin-header">
         <div>
           <p className="eyebrow">Admin</p>
@@ -651,61 +671,25 @@ function AdminSchedule() {
           </p>
         </div>
 
-        <div className="admin-header-actions">
-          <Link className="button button-secondary" href="/admin/inbox">
-            Inbox
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/clients">
-            Clients
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/consults">
-            Consults
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/projects">
-            Projects
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/project-timeline">
-             Timeline
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/payments">
-            Payments
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/credit-ledger">
-            Credit Ledger
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/membership-offers">
-            Membership Offers
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/membership-requests">
-            Membership Requests
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/membership-offer-responses">
-            Offer Responses
-          </Link>
-          <Link className="button button-secondary" href="/admin/dashboard">
-            Dashboard
-          </Link>
-
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={async () => {
-            await signOut(auth);
-            router.push("/tattoo-portal");
-          }}
-        >
-          Log Out
-        </button>   
-        </div>
+        <nav className="admin-header-actions schedule-desktop-nav" aria-label="Admin pages">
+          {scheduleAdminLinks.map((item) => (
+            <Link key={item.href} className="button button-secondary" href={item.href}>
+              {item.label}
+            </Link>
+          ))}
+          <button className="button button-secondary" type="button" onClick={handleLogout}>Log Out</button>
+        </nav>
+        <details className="schedule-mobile-navigation">
+          <summary><span>Admin navigation</span><span aria-hidden="true">Menu ▾</span></summary>
+          <nav className="schedule-mobile-navigation-links" aria-label="Admin pages">
+            {scheduleAdminLinks.map((item) => (
+              <Link key={item.href} className="button button-secondary" href={item.href}>
+                {item.label}
+              </Link>
+            ))}
+            <button className="button button-secondary" type="button" onClick={handleLogout}>Log Out</button>
+          </nav>
+        </details>
       </section>
 
       <section className="mx-auto mb-6 w-full rounded-3xl border border-white/15 bg-white/[0.045] p-4 sm:p-6" aria-label="Shared studio calendar">
@@ -713,6 +697,7 @@ function AdminSchedule() {
           <div>
             <p className="eyebrow">One Studio Room · Two Artists</p>
             <h2 className="text-2xl font-black md:text-3xl">Shared-chair calendar</h2>
+            <Link className="button button-primary mt-3" href="#schedule-create-appointment">+ New appointment</Link>
             <p className="mt-2 text-sm text-white/70">Sunday–Friday, 11 AM–8 PM Edmonton time. Saturdays closed. All appointments reserve the same studio room.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -769,9 +754,11 @@ function AdminSchedule() {
       <section className="admin-applications-layout">
         <aside className="applications-list-panel">
           <div className="panel-heading">
-            <h2>Appointments</h2>
+            <h2>All Appointments</h2>
             <p>{filteredAppointments.length}</p>
           </div>
+
+          <p className="mb-3 text-sm text-white/65">Historical appointments appear here even when a different day or artist is selected above.</p>
 
           <div className="admin-filters">
             <label>
@@ -840,7 +827,7 @@ function AdminSchedule() {
         </aside>
 
         <section className="application-detail-panel">
-          <article className="admin-card schedule-create-card">
+          <article id="schedule-create-appointment" className="admin-card schedule-create-card">
             <p className="eyebrow">Create Appointment</p>
             <h2>Book a client into the studio schedule</h2>
             <p className="mb-4 text-sm text-white/70">Shared chair: Sunday–Friday, 11 AM–8 PM Edmonton time. Overlapping bookings are blocked using existing appointments and a fresh server check. Holidays require manual review.</p>
