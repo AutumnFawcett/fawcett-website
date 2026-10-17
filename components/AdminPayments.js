@@ -127,6 +127,21 @@ function getTodayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+
+const paymentAdminLinks = [
+  { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin/inbox", label: "Inbox" },
+  { href: "/admin/clients", label: "Clients" },
+  { href: "/admin/consults", label: "Consults" },
+  { href: "/admin/schedule", label: "Schedule" },
+  { href: "/admin/projects", label: "Projects" },
+  { href: "/admin/project-timeline", label: "Timeline" },
+  { href: "/admin/credit-ledger", label: "Credit Ledger" },
+  { href: "/admin/membership-offers", label: "Membership Offers" },
+  { href: "/admin/membership-requests", label: "Membership Requests" },
+  { href: "/admin/membership-offer-responses", label: "Offer Responses" },
+];
+
 const DEFAULT_RECEIVED_DATE = getTodayInputValue();
 
 
@@ -727,7 +742,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
   }
 
   return (
-    <main className="admin-page">
+    <main className="admin-page payments-page">
       <section className="admin-header">
         <div>
           <p className="eyebrow">Admin</p>
@@ -739,57 +754,27 @@ function handlePaymentMethodChange(nextPaymentMethod) {
           </p>
         </div>
 
-        <div className="admin-header-actions">
-          <Link className="button button-secondary" href="/admin/dashboard">
-            Dashboard
-          </Link>
-          <Link className="button button-secondary" href="/admin/inbox">
-            Inbox
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/clients">
-            Clients
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/schedule">
-            Schedule
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/projects">
-            Projects
-          </Link>
-
-        <Link className="button button-secondary" href="/admin/project-timeline">
-             Timeline
-        </Link>
-
-
-          <Link className="button button-secondary" href="/admin/credit-ledger">
-            Credit Ledger
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/membership-offers">
-            Membership Offers
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/membership-requests">
-            Membership Requests
-          </Link>
-          <Link className="button button-secondary" href="/admin/membership-offer-responses">
-            Offer Responses
-          </Link>
-
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={async () => {
+        <nav className="admin-header-actions payments-desktop-nav" aria-label="Admin pages">
+          {paymentAdminLinks.map((item) => (
+            <Link key={item.href} className="button button-secondary" href={item.href}>{item.label}</Link>
+          ))}
+          <button className="button button-secondary" type="button" onClick={async () => {
             await signOut(auth);
             router.push("/tattoo-portal");
-          }}
-        >
-          Log Out
-        </button>
-        </div>
+          }}>Log Out</button>
+        </nav>
+        <details className="payments-mobile-navigation">
+          <summary><span>Admin navigation</span><span aria-hidden="true">Menu ▾</span></summary>
+          <nav className="payments-mobile-navigation-links" aria-label="Admin pages">
+            {paymentAdminLinks.map((item) => (
+              <Link key={item.href} className="button button-secondary" href={item.href}>{item.label}</Link>
+            ))}
+            <button className="button button-secondary" type="button" onClick={async () => {
+              await signOut(auth);
+              router.push("/tattoo-portal");
+            }}>Log Out</button>
+          </nav>
+        </details>
       </section>
 
       <AdminSquareInvoiceAssistant
