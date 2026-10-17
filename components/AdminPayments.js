@@ -442,10 +442,11 @@ function AdminPayments() {
 
 function handlePaymentMethodChange(nextPaymentMethod) {
   setPaymentMethod(nextPaymentMethod);
-
-  if (nextPaymentMethod === "in_studio_credit") {
-    setCreditHandling("uses_in_studio_credit");
-  }
+  setCreditHandling(
+    nextPaymentMethod === "in_studio_credit" && isReceivedStatus(paymentStatus)
+      ? "uses_in_studio_credit"
+      : "none"
+  );
 }
 
   function handleSelectPayment(payment) {
@@ -1054,7 +1055,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
               </label>
 
               <label>
-                Date Received
+                {isReceivedStatus(paymentStatus) ? "Date Received" : "Requested / Record Date"}
                 <input
                   type="date"
                   value={receivedDate}
@@ -1103,7 +1104,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                 type="submit"
                 disabled={isSaving}
               >
-                {isSaving ? "Recording..." : "Record Payment"}
+                {isSaving ? "Saving..." : isReceivedStatus(paymentStatus) ? "Record Verified Receipt" : "Record Pending Request"}
               </button>
             </form>
           </article>
@@ -1167,7 +1168,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
 
                   <p>
                     <strong>Date:</strong>{" "}
-                    {formatDate(selectedPayment.receivedAt)}
+                    {formatDate(selectedPayment.receivedAt || selectedPayment.createdAt)}
                   </p>
                 </article>
 
@@ -1178,9 +1179,10 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                     Status
                     <select
                       value={selectedStatusDraft}
-                      onChange={(event) =>
-                        setSelectedStatusDraft(event.target.value)
-                      }
+                      onChange={(event) => {
+                        setSelectedStatusDraft(event.target.value);
+                        setEditReceiptAcknowledged(false);
+                      }}
                       disabled={isSaving}
                     >
                       {paymentStatusOptions.map((status) => (
@@ -1213,6 +1215,14 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                     />
                   </label>
 
+                  {!isReceivedStatus(selectedPayment.status) && isReceivedStatus(selectedStatusDraft) && (
+                    <label className="flex items-start gap-3 text-sm font-bold">
+                      <input type="checkbox" checked={editReceiptAcknowledged}
+                        onChange={(event) => setEditReceiptAcknowledged(event.target.checked)} />
+                      I independently verified that this payment was received, and entered its receipt
+                      or Square transaction reference. This manually updates the studio record.
+                    </label>
+                  )}
                   <button
                     className="button button-primary"
                     type="button"
