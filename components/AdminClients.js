@@ -87,7 +87,7 @@ function getLatestMillis(items) {
   }, 0);
 }
 
-function AdminClients() {
+function AdminClients({ initialClientUid = "" }) {
   const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
@@ -239,9 +239,8 @@ function AdminClients() {
   const selectedClient = useMemo(() => {
     if (selectedClientKey) return clients.find((client) => client.key === selectedClientKey) || null;
     // URL handoff is exact UID only. Never link clients by matching email/name.
-    const linkedUid = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("uid") : null;
-    return exactClientUidMatch(clients, linkedUid);
-  }, [clients, selectedClientKey]);
+    return exactClientUidMatch(clients, initialClientUid);
+  }, [clients, selectedClientKey, initialClientUid]);
 
   const filteredClients = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
