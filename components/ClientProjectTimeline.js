@@ -14,7 +14,8 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const timelineTypeLabels = {
   general_note: "General Note",
@@ -83,7 +84,8 @@ function getStatusClass(status) {
   return "client-timeline-pill";
 }
 
-export default function ClientProjectTimeline() {
+function ClientProjectTimeline() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -169,7 +171,7 @@ export default function ClientProjectTimeline() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     if (!user) return;
@@ -223,7 +225,7 @@ export default function ClientProjectTimeline() {
       unsubscribeTimeline();
       unsubscribeProjects();
     };
-  }, [user]);
+  }, [db, user]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -482,3 +484,5 @@ export default function ClientProjectTimeline() {
     </main>
   );
 }
+
+export default withFirebase(ClientProjectTimeline);

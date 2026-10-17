@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const requestTypeOptions = [
   { value: "pause_monthly_payments", label: "Suspend / Pause Monthly Payments" },
@@ -109,7 +110,8 @@ function getRequestStatusClass(status) {
   return "request-status-pill";
 }
 
-export default function AdminMembershipRequests() {
+function AdminMembershipRequests() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -235,7 +237,7 @@ export default function AdminMembershipRequests() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -260,7 +262,7 @@ export default function AdminMembershipRequests() {
     );
 
     return () => unsubscribe();
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectRequest(request) {
     setSelectedRequestId(request.id);
@@ -850,3 +852,5 @@ export default function AdminMembershipRequests() {
     </main>
   );
 }
+
+export default withFirebase(AdminMembershipRequests);

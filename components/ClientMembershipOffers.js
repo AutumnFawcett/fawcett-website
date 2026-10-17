@@ -18,7 +18,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 function timestampToMillis(timestamp) {
   if (!timestamp) return 0;
@@ -118,7 +119,8 @@ ${note || "I am not ready to move forward at this time."}`;
   return note || "Membership offer response.";
 }
 
-export default function ClientMembershipOffers() {
+function ClientMembershipOffers() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -183,7 +185,7 @@ export default function ClientMembershipOffers() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     if (!user) return;
@@ -236,7 +238,7 @@ export default function ClientMembershipOffers() {
       unsubscribeApplications();
       unsubscribeResponses();
     };
-  }, [user]);
+  }, [db, user]);
 
   function updateNote(applicationId, value) {
     setNotesByApplicationId((currentNotes) => ({
@@ -638,3 +640,6 @@ export default function ClientMembershipOffers() {
     </main>
   );
 }
+
+
+export default withFirebase(ClientMembershipOffers);

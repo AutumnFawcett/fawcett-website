@@ -16,7 +16,8 @@ import {
   serverTimestamp,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 function timestampToMillis(timestamp) {
   if (!timestamp) return 0;
@@ -104,7 +105,8 @@ function getCreditLabel(payment) {
   return "No Credit Change";
 }
 
-export default function ClientCredit() {
+function ClientCredit() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -181,7 +183,7 @@ const [loadError, setLoadError] = useState("");
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     if (!user) return;
@@ -209,7 +211,7 @@ const [loadError, setLoadError] = useState("");
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [db, user]);
 
 async function submitMembershipChangeRequest(event) {
   event.preventDefault();
@@ -568,3 +570,6 @@ async function submitMembershipChangeRequest(event) {
     </main>
   );
 }
+
+
+export default withFirebase(ClientCredit);

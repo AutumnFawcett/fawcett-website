@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const responseStatusOptions = [
   { value: "new", label: "New" },
@@ -172,7 +173,8 @@ You are welcome to message us again if you want to revisit a tattoo project in t
 Thank you for your response. The studio has reviewed it and will confirm the next step here.`;
 }
 
-export default function AdminMembershipOfferResponses(){
+function AdminMembershipOfferResponses(){
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
   
   const [user, setUser] = useState(null);
@@ -320,7 +322,7 @@ export default function AdminMembershipOfferResponses(){
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -365,7 +367,7 @@ export default function AdminMembershipOfferResponses(){
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectResponse(response) {
     const application = response.application || null;
@@ -1002,3 +1004,6 @@ export default function AdminMembershipOfferResponses(){
     </main>
   );
 }
+
+
+export default withFirebase(AdminMembershipOfferResponses);

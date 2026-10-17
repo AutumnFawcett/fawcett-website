@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const statusOptionsByKind = {
   message: [
@@ -240,7 +241,8 @@ function getItemAdminLink(item) {
   return "/admin/dashboard";
 }
 
-export default function AdminIntakeDashboard() {
+function AdminIntakeDashboard() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -435,7 +437,7 @@ export default function AdminIntakeDashboard() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -498,7 +500,7 @@ export default function AdminIntakeDashboard() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectItem(item) {
     setSelectedItemKey(item.intakeKey);
@@ -1095,3 +1097,5 @@ export default function AdminIntakeDashboard() {
     </main>
   );
 }
+
+export default withFirebase(AdminIntakeDashboard);

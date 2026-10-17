@@ -17,7 +17,8 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const clientStatusOptions = [
   { value: "lead", label: "Lead" },
@@ -85,7 +86,8 @@ function getLatestMillis(items) {
   }, 0);
 }
 
-export default function AdminClients() {
+function AdminClients() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -292,7 +294,7 @@ export default function AdminClients() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -355,7 +357,7 @@ export default function AdminClients() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectClient(client) {
     setSelectedClientKey(client.key);
@@ -961,3 +963,5 @@ export default function AdminClients() {
     </main>
   );
 }
+
+export default withFirebase(AdminClients);

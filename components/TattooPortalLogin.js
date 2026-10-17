@@ -10,9 +10,11 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
-export default function TattooPortalLogin() {
+function TattooPortalLogin() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [mode, setMode] = useState("client_login");
@@ -323,3 +325,5 @@ export default function TattooPortalLogin() {
     </main>
   );
 }
+
+export default withFirebase(TattooPortalLogin);

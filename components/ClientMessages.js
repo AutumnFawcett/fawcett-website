@@ -20,7 +20,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 function timestampToMillis(timestamp) {
   if (!timestamp) return 0;
@@ -49,7 +50,8 @@ function getInboxLabel(inbox) {
   return "General";
 }
 
-export default function ClientMessages() {
+function ClientMessages() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -89,7 +91,7 @@ export default function ClientMessages() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     if (!user) return;
@@ -127,7 +129,7 @@ export default function ClientMessages() {
     );
 
     return () => unsubscribe();
-  }, [user, selectedConversationId]);
+  }, [user, selectedConversationId, db]);
 
   useEffect(() => {
     if (!user || !selectedConversation) return;
@@ -161,7 +163,7 @@ export default function ClientMessages() {
     );
 
     return () => unsubscribe();
-  }, [user, selectedConversation]);
+  }, [user, selectedConversation, db]);
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -502,3 +504,5 @@ export default function ClientMessages() {
     </main>
   );
 }
+
+export default withFirebase(ClientMessages);

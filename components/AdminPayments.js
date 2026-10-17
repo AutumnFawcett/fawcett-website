@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const paymentTypeOptions = [
   { value: "consult_fee", label: "Consult Fee" },
@@ -134,7 +135,8 @@ function getTodayInputValue() {
 const DEFAULT_RECEIVED_DATE = getTodayInputValue();
 
 
-export default function AdminPayments() {
+function AdminPayments() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -355,7 +357,7 @@ export default function AdminPayments() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -424,7 +426,7 @@ export default function AdminPayments() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handlePaymentTypeChange(nextPaymentType) {
   setPaymentType(nextPaymentType);
@@ -1157,3 +1159,5 @@ function handlePaymentMethodChange(nextPaymentMethod) {
     </main>
   );
 }
+
+export default withFirebase(AdminPayments);

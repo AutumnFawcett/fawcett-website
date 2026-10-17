@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const appointmentStatusOptions = [
   { value: "tentative", label: "Tentative" },
@@ -99,7 +100,8 @@ function getArtistPayload(artistValue) {
   };
 }
 
-export default function AdminSchedule() {
+function AdminSchedule() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -275,7 +277,7 @@ export default function AdminSchedule() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -338,7 +340,7 @@ export default function AdminSchedule() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function handleSelectAppointment(appointment) {
     setSelectedAppointmentId(appointment.id);
@@ -1009,3 +1011,5 @@ export default function AdminSchedule() {
     </main>
   );
 }
+
+export default withFirebase(AdminSchedule);

@@ -14,7 +14,8 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 function timestampToMillis(timestamp) {
   if (!timestamp) return 0;
@@ -69,7 +70,8 @@ function getStatusClass(status) {
   return "appointment-status";
 }
 
-export default function ClientAppointments() {
+function ClientAppointments() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -142,7 +144,7 @@ const pastAppointments = useMemo(() => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     if (!user) return;
@@ -170,7 +172,7 @@ const pastAppointments = useMemo(() => {
     );
 
     return () => unsubscribe();
-  }, [user]);
+  }, [db, user]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -404,3 +406,5 @@ const pastAppointments = useMemo(() => {
     </main>
   );
 }
+
+export default withFirebase(ClientAppointments);

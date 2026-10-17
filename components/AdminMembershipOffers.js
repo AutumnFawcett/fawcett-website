@@ -18,7 +18,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebaseClient";
+import { getFirebaseClient } from "@/lib/firebaseClient";
+import { withFirebase } from "@/components/FirebaseFeature";
 
 const tierOptions = [
   {
@@ -161,7 +162,8 @@ ${termsSummary || "Full terms will be confirmed before enrollment."}
 Please reply here if you would like to review, ask questions, or move forward.`;
 }
 
-export default function AdminMembershipOffers() {
+function AdminMembershipOffers() {
+  const { auth, db } = getFirebaseClient();
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [adminChecked, setAdminChecked] = useState(false);
@@ -302,7 +304,7 @@ export default function AdminMembershipOffers() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [auth, db]);
 
   useEffect(() => {
     if (!user || !isAdmin) return;
@@ -327,7 +329,7 @@ export default function AdminMembershipOffers() {
     );
 
     return () => unsubscribe();
-  }, [user, isAdmin]);
+  }, [user, isAdmin, db]);
 
   function applyTierDefaults(nextTier) {
     const tier = tierOptions.find((option) => option.value === nextTier);
@@ -1088,3 +1090,5 @@ export default function AdminMembershipOffers() {
     </main>
   );
 }
+
+export default withFirebase(AdminMembershipOffers);

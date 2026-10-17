@@ -24,3 +24,23 @@ test('ordinary consultations preserve their original budget and no selection can
     assert.equal(consultationBudget('Original budget', invalid), 'Original budget');
   }
 });
+
+test('full admin-visible message summary includes each selected preference beyond the preview', async () => {
+  const { buildConsultSummary } = await import('../../lib/consultSummary.mjs');
+  const form = {
+    fullName: 'Synthetic Client', email: 'client@example.invalid', phone: '000-000-0000',
+    preferredContactMethod: 'email', preferredArtist: 'ben', projectType: 'custom_tattoo',
+    placement: 'upper arm', bodySide: 'left', approximateSize: '6 inches',
+    colourPreference: 'black_and_grey', tattooIdea: 'Fictional flower', budgetRange: '$4,000 project',
+  };
+  for (const plan of paymentPlans) {
+    const summary = buildConsultSummary(form, plan.id);
+    const preference = consultationBudget(form.budgetRange, plan.id);
+    assert.ok(summary.includes(`Budget range: ${preference}`));
+    assert.ok(summary.indexOf('Payment plan request:') > 140);
+    assert.ok(summary.includes('Fictional flower'));
+    assert.ok(summary.includes('subject to final terms'));
+  }
+  assert.ok(buildConsultSummary(form).includes('Budget range: $4,000 project\n'));
+  assert.ok(!buildConsultSummary(form).includes('Payment plan request:'));
+});
