@@ -75,6 +75,7 @@ function formatDate(timestamp) {
   if (!millis) return "No date";
 
   return new Date(millis).toLocaleString("en-CA", {
+    timeZone: "America/Edmonton",
     dateStyle: "medium",
     timeStyle: "short",
   });
