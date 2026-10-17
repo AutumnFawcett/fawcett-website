@@ -22,7 +22,7 @@ import {
 import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
 import {
-  calendarDays, edmontonToday, edmontonWall, stepCalendarDate,
+  calendarDays, edmontonToday, edmontonWall, findChairConflicts, stepCalendarDate,
   toMillis, validateChairSlot,
 } from "@/lib/scheduling/sharedChair.mjs";
 
@@ -518,6 +518,22 @@ function AdminSchedule() {
     setActionSuccess("");
 
     try {
+      // Reactivating a cancelled slot must not silently double-book the chair.
+      if (selectedAppointment.status === "cancelled" && statusDraft !== "cancelled") {
+        const start = toMillis(selectedAppointment.startAt);
+        const end = toMillis(selectedAppointment.endAt);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+          setActionError("Cannot reactivate an appointment with an invalid time range.");
+          return;
+        }
+        const latest = await getDocsFromServer(collection(db, "appointments"));
+        const records = latest.docs.map((snap) => ({ id: snap.id, ...snap.data() }));
+        if (findChairConflicts(records, start, end, selectedAppointment.id).length) {
+          setActionError("This appointment conflicts with another booking for the shared studio chair.");
+          return;
+        }
+      }
+
       const appointmentRef = doc(
         db,
         "appointments",
