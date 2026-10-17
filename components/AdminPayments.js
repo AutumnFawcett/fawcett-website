@@ -20,6 +20,9 @@ import {
 } from "firebase/firestore";
 import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
+import AdminSquareInvoiceAssistant from "@/components/AdminSquareInvoiceAssistant";
+import { isReceivedStatus, validateManualRecord } from "@/lib/payments/manualReconciliation.mjs";
+import { cadToCents } from "@/lib/payments/squareInvoiceDraft.mjs";
 
 const paymentTypeOptions = [
   { value: "consult_fee", label: "Consult Fee" },
@@ -116,14 +119,6 @@ function formatMoneyFromCents(cents) {
   }).format(amount);
 }
 
-function dollarsToCents(value) {
-  const numberValue = Number(value);
-
-  if (!Number.isFinite(numberValue)) return 0;
-
-  return Math.round(numberValue * 100);
-}
-
 function getClientKey(record) {
   return record.clientUid || record.clientEmail || record.email || record.id || "";
 }
@@ -131,6 +126,21 @@ function getClientKey(record) {
 function getTodayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
+
+
+const paymentAdminLinks = [
+  { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin/inbox", label: "Inbox" },
+  { href: "/admin/clients", label: "Clients" },
+  { href: "/admin/consults", label: "Consults" },
+  { href: "/admin/schedule", label: "Schedule" },
+  { href: "/admin/projects", label: "Projects" },
+  { href: "/admin/project-timeline", label: "Timeline" },
+  { href: "/admin/credit-ledger", label: "Credit Ledger" },
+  { href: "/admin/membership-offers", label: "Membership Offers" },
+  { href: "/admin/membership-requests", label: "Membership Requests" },
+  { href: "/admin/membership-offer-responses", label: "Offer Responses" },
+];
 
 const DEFAULT_RECEIVED_DATE = getTodayInputValue();
 
@@ -165,7 +175,9 @@ function AdminPayments() {
   const [paymentType, setPaymentType] = useState("tattoo_session_payment");
   const [paymentMethod, setPaymentMethod] = useState("etransfer");
   const [creditHandling, setCreditHandling] = useState("none");
-  const [paymentStatus, setPaymentStatus] = useState("paid");
+  const [paymentStatus, setPaymentStatus] = useState("pending");
+  const [receiptAcknowledged, setReceiptAcknowledged] = useState(false);
+  const [editReceiptAcknowledged, setEditReceiptAcknowledged] = useState(false);
   const [amountDollars, setAmountDollars] = useState("");
   const [receivedDate, setReceivedDate] = useState(DEFAULT_RECEIVED_DATE);
   const [paymentReference, setPaymentReference] = useState("");
@@ -303,19 +315,19 @@ function AdminPayments() {
           summary.totalRecordedCents += amount;
         }
 
-        if (payment.paymentMethod === "afterpay_financing") {
+        if (isReceivedStatus(payment.status) && payment.paymentMethod === "afterpay_financing") {
           summary.afterpayCents += amount;
         }
 
-        if (payment.paymentMethod === "in_studio_credit") {
+        if (isReceivedStatus(payment.status) && payment.paymentMethod === "in_studio_credit") {
           summary.inStudioCreditUsedCents += amount;
         }
 
-        if (payment.creditHandling === "adds_in_studio_credit") {
+        if (isReceivedStatus(payment.status) && payment.creditHandling === "adds_in_studio_credit") {
           summary.creditAddedCents += amount;
         }
 
-        if (payment.creditHandling === "uses_in_studio_credit") {
+        if (isReceivedStatus(payment.status) && payment.creditHandling === "uses_in_studio_credit") {
           summary.creditUsedCents += amount;
         }
 
@@ -431,24 +443,23 @@ function AdminPayments() {
   function handlePaymentTypeChange(nextPaymentType) {
   setPaymentType(nextPaymentType);
 
-  if (
-    nextPaymentType === "membership_initial_payment" ||
-    nextPaymentType === "membership_monthly_payment"
-  ) {
-    setCreditHandling("adds_in_studio_credit");
-  }
+  // Payment-plan selections are requests, not authorization or confirmation.
+  // Never add Studio Credit automatically based on a selected payment type.
+  setCreditHandling("none");
 }
 
 function handlePaymentMethodChange(nextPaymentMethod) {
   setPaymentMethod(nextPaymentMethod);
-
-  if (nextPaymentMethod === "in_studio_credit") {
-    setCreditHandling("uses_in_studio_credit");
-  }
+  setCreditHandling(
+    nextPaymentMethod === "in_studio_credit" && isReceivedStatus(paymentStatus)
+      ? "uses_in_studio_credit"
+      : "none"
+  );
 }
 
   function handleSelectPayment(payment) {
     setSelectedPaymentId(payment.id);
+    setEditReceiptAcknowledged(false);
     setSelectedStatusDraft(payment.status || "paid");
     setSelectedNotesDraft(payment.adminReview?.internalNotes || "");
     setSelectedReferenceDraft(payment.reference || "");
@@ -491,7 +502,17 @@ function handlePaymentMethodChange(nextPaymentMethod) {
       return;
     }
 
-    const amountCents = dollarsToCents(amountDollars);
+    const amountCents = cadToCents(amountDollars);
+    const validationError = validateManualRecord({
+      status: paymentStatus,
+      creditHandling,
+      reference: paymentReference,
+      acknowledged: receiptAcknowledged,
+    });
+    if (validationError) {
+      setActionError(validationError);
+      return;
+    }
 
     if (!amountCents || amountCents <= 0) {
       setActionError("Enter a payment amount greater than $0.");
@@ -547,8 +568,14 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         amountDisplay: formatMoneyFromCents(amountCents),
         currency: "CAD",
 
-        receivedAt,
+        receivedAt: isReceivedStatus(paymentStatus) ? receivedAt : null,
         reference: paymentReference.trim(),
+        manualReconciliation: {
+          status: isReceivedStatus(paymentStatus) ? "studio_confirmed" : "unconfirmed",
+          // A studio-attested record is not an API-confirmed Square payment.
+          acknowledgedBy: isReceivedStatus(paymentStatus) ? user.email : null,
+          acknowledgedAt: isReceivedStatus(paymentStatus) ? serverTimestamp() : null,
+        },
 
         afterpayPolicy: {
           studioCapCents: 40000,
@@ -565,7 +592,9 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         updatedAt: serverTimestamp(),
       });
 
-      setActionSuccess("Payment recorded.");
+      setActionSuccess(isReceivedStatus(paymentStatus)
+        ? "Studio-confirmed payment recorded. Review any Studio Credit effects."
+        : "Pending payment request recorded. No payment or Studio Credit has been confirmed.");
       setAmountDollars("");
       setPaymentReference("");
       setPaymentNotes("");
@@ -574,7 +603,8 @@ function handlePaymentMethodChange(nextPaymentMethod) {
       setPaymentType("tattoo_session_payment");
       setPaymentMethod("etransfer");
       setCreditHandling("none");
-      setPaymentStatus("paid");
+      setPaymentStatus("pending");
+      setReceiptAcknowledged(false);
     } catch (error) {
       console.error(error);
       setActionError("Could not record payment.");
@@ -586,6 +616,20 @@ function handlePaymentMethodChange(nextPaymentMethod) {
   async function saveSelectedPayment() {
     if (!selectedPayment) return;
 
+    const upgradingToReceived = !isReceivedStatus(selectedPayment.status) && isReceivedStatus(selectedStatusDraft);
+    if (upgradingToReceived) {
+      const error = validateManualRecord({
+        status: selectedStatusDraft,
+        creditHandling: selectedPayment.creditHandling || "none",
+        reference: selectedReferenceDraft,
+        acknowledged: editReceiptAcknowledged,
+      });
+      if (error) {
+        setActionError(error);
+        return;
+      }
+    }
+
     setIsSaving(true);
     setActionError("");
     setActionSuccess("");
@@ -596,6 +640,12 @@ function handlePaymentMethodChange(nextPaymentMethod) {
       await updateDoc(paymentRef, {
         status: selectedStatusDraft,
         reference: selectedReferenceDraft,
+        ...(upgradingToReceived ? {
+          receivedAt: new Date(),
+          "manualReconciliation.status": "studio_confirmed",
+          "manualReconciliation.acknowledgedBy": user.email,
+          "manualReconciliation.acknowledgedAt": serverTimestamp(),
+        } : {}),
         "adminReview.internalNotes": selectedNotesDraft,
         "adminReview.lastUpdatedBy": user.email,
         "adminReview.lastUpdatedAt": serverTimestamp(),
@@ -692,7 +742,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
   }
 
   return (
-    <main className="admin-page">
+    <main className="admin-page payments-page">
       <section className="admin-header">
         <div>
           <p className="eyebrow">Admin</p>
@@ -704,62 +754,43 @@ function handlePaymentMethodChange(nextPaymentMethod) {
           </p>
         </div>
 
-        <div className="admin-header-actions">
-          <Link className="button button-secondary" href="/admin/dashboard">
-            Dashboard
-          </Link>
-          <Link className="button button-secondary" href="/admin/inbox">
-            Inbox
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/clients">
-            Clients
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/schedule">
-            Schedule
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/projects">
-            Projects
-          </Link>
-
-        <Link className="button button-secondary" href="/admin/project-timeline">
-             Timeline
-        </Link>
-
-
-          <Link className="button button-secondary" href="/admin/credit-ledger">
-            Credit Ledger
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/membership-offers">
-            Membership Offers
-          </Link>
-
-          <Link className="button button-secondary" href="/admin/membership-requests">
-            Membership Requests
-          </Link>
-          <Link className="button button-secondary" href="/admin/membership-offer-responses">
-            Offer Responses
-          </Link>
-
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={async () => {
+        <nav className="admin-header-actions payments-desktop-nav" aria-label="Admin pages">
+          {paymentAdminLinks.map((item) => (
+            <Link key={item.href} className="button button-secondary" href={item.href}>{item.label}</Link>
+          ))}
+          <button className="button button-secondary" type="button" onClick={async () => {
             await signOut(auth);
             router.push("/tattoo-portal");
-          }}
-        >
-          Log Out
-        </button>
-        </div>
+          }}>Log Out</button>
+        </nav>
+        <details className="payments-mobile-navigation">
+          <summary><span>Admin navigation</span><span aria-hidden="true">Menu ▾</span></summary>
+          <nav className="payments-mobile-navigation-links" aria-label="Admin pages">
+            {paymentAdminLinks.map((item) => (
+              <Link key={item.href} className="button button-secondary" href={item.href}>{item.label}</Link>
+            ))}
+            <button className="button button-secondary" type="button" onClick={async () => {
+              await signOut(auth);
+              router.push("/tattoo-portal");
+            }}>Log Out</button>
+          </nav>
+        </details>
       </section>
 
+      <AdminSquareInvoiceAssistant
+        clients={clients}
+        selectedClientKey={paymentClientKey}
+        onChooseClient={handleClientChange}
+        amountDollars={amountDollars}
+        onAmountChange={setAmountDollars}
+      />
+      <p className="mx-auto mb-4 w-full max-w-[1400px] text-sm text-white/65">
+        The totals below are historical studio-entered records, not independently verified Square deposits.
+        Existing ledger entries are unchanged.
+      </p>
       <section className="payment-summary-grid">
         <article className="portal-stat-card">
-          <p>Total Recorded</p>
+          <p>Manually Recorded Received</p>
           <strong>{formatMoneyFromCents(totals.totalRecordedCents)}</strong>
         </article>
 
@@ -870,7 +901,12 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         <section className="application-detail-panel">
           <article className="admin-card payment-create-card">
             <p className="eyebrow">Record Payment</p>
-            <h2>Add a payment or in-studio credit transaction</h2>
+            <h2>Record a pending request or verified receipt</h2>
+            <p className="mb-3 text-sm text-white/75">
+              New records default to Pending and do not change Studio Credit. For payments already
+              received, verify the money in Square or your bank first, then enter the receipt reference
+              and explicitly acknowledge the verification.
+            </p>
 
             <form className="admin-form payment-form" onSubmit={createPayment}>
               <label>
@@ -954,6 +990,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                 Credit Handling
                 <select
                   value={creditHandling}
+                  disabled={!isReceivedStatus(paymentStatus)}
                   onChange={(event) => setCreditHandling(event.target.value)}
                 >
                   {creditHandlingOptions.map((option) => (
@@ -968,7 +1005,11 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                 Status
                 <select
                   value={paymentStatus}
-                  onChange={(event) => setPaymentStatus(event.target.value)}
+                  onChange={(event) => {
+                    setPaymentStatus(event.target.value);
+                    setReceiptAcknowledged(false);
+                    if (!isReceivedStatus(event.target.value)) setCreditHandling("none");
+                  }}
                 >
                   {paymentStatusOptions.map((status) => (
                     <option key={status.value} value={status.value}>
@@ -992,7 +1033,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
               </label>
 
               <label>
-                Date Received
+                {isReceivedStatus(paymentStatus) ? "Date Received" : "Requested / Record Date"}
                 <input
                   type="date"
                   value={receivedDate}
@@ -1027,12 +1068,21 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                 another method.
               </div>
 
+              {isReceivedStatus(paymentStatus) && (
+                <label className="flex items-start gap-3 text-sm font-bold">
+                  <input type="checkbox" checked={receiptAcknowledged}
+                    onChange={(event) => setReceiptAcknowledged(event.target.checked)} />
+                  I verified this money was received in Square Dashboard, my bank or the cash register.
+                  I have entered its receipt/transaction reference. This is a manual studio confirmation,
+                  not automatic Square verification.
+                </label>
+              )}
               <button
                 className="button button-primary"
                 type="submit"
                 disabled={isSaving}
               >
-                {isSaving ? "Recording..." : "Record Payment"}
+                {isSaving ? "Saving..." : isReceivedStatus(paymentStatus) ? "Record Verified Receipt" : "Record Pending Request"}
               </button>
             </form>
           </article>
@@ -1096,7 +1146,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
 
                   <p>
                     <strong>Date:</strong>{" "}
-                    {formatDate(selectedPayment.receivedAt)}
+                    {formatDate(selectedPayment.receivedAt || selectedPayment.createdAt)}
                   </p>
                 </article>
 
@@ -1107,9 +1157,10 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                     Status
                     <select
                       value={selectedStatusDraft}
-                      onChange={(event) =>
-                        setSelectedStatusDraft(event.target.value)
-                      }
+                      onChange={(event) => {
+                        setSelectedStatusDraft(event.target.value);
+                        setEditReceiptAcknowledged(false);
+                      }}
                       disabled={isSaving}
                     >
                       {paymentStatusOptions.map((status) => (
@@ -1142,6 +1193,14 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                     />
                   </label>
 
+                  {!isReceivedStatus(selectedPayment.status) && isReceivedStatus(selectedStatusDraft) && (
+                    <label className="flex items-start gap-3 text-sm font-bold">
+                      <input type="checkbox" checked={editReceiptAcknowledged}
+                        onChange={(event) => setEditReceiptAcknowledged(event.target.checked)} />
+                      I independently verified that this payment was received, and entered its receipt
+                      or Square transaction reference. This manually updates the studio record.
+                    </label>
+                  )}
                   <button
                     className="button button-primary"
                     type="button"
