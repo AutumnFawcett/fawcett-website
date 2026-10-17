@@ -20,6 +20,8 @@ import {
 } from "firebase/firestore";
 import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
+import AdminSquareInvoiceAssistant from "@/components/AdminSquareInvoiceAssistant";
+import { isReceivedStatus, validateManualRecord } from "@/lib/payments/manualReconciliation.mjs";
 
 const paymentTypeOptions = [
   { value: "consult_fee", label: "Consult Fee" },
@@ -165,7 +167,9 @@ function AdminPayments() {
   const [paymentType, setPaymentType] = useState("tattoo_session_payment");
   const [paymentMethod, setPaymentMethod] = useState("etransfer");
   const [creditHandling, setCreditHandling] = useState("none");
-  const [paymentStatus, setPaymentStatus] = useState("paid");
+  const [paymentStatus, setPaymentStatus] = useState("pending");
+  const [receiptAcknowledged, setReceiptAcknowledged] = useState(false);
+  const [editReceiptAcknowledged, setEditReceiptAcknowledged] = useState(false);
   const [amountDollars, setAmountDollars] = useState("");
   const [receivedDate, setReceivedDate] = useState(DEFAULT_RECEIVED_DATE);
   const [paymentReference, setPaymentReference] = useState("");
@@ -303,19 +307,19 @@ function AdminPayments() {
           summary.totalRecordedCents += amount;
         }
 
-        if (payment.paymentMethod === "afterpay_financing") {
+        if (isReceivedStatus(payment.status) && payment.paymentMethod === "afterpay_financing") {
           summary.afterpayCents += amount;
         }
 
-        if (payment.paymentMethod === "in_studio_credit") {
+        if (isReceivedStatus(payment.status) && payment.paymentMethod === "in_studio_credit") {
           summary.inStudioCreditUsedCents += amount;
         }
 
-        if (payment.creditHandling === "adds_in_studio_credit") {
+        if (isReceivedStatus(payment.status) && payment.creditHandling === "adds_in_studio_credit") {
           summary.creditAddedCents += amount;
         }
 
-        if (payment.creditHandling === "uses_in_studio_credit") {
+        if (isReceivedStatus(payment.status) && payment.creditHandling === "uses_in_studio_credit") {
           summary.creditUsedCents += amount;
         }
 
@@ -431,12 +435,9 @@ function AdminPayments() {
   function handlePaymentTypeChange(nextPaymentType) {
   setPaymentType(nextPaymentType);
 
-  if (
-    nextPaymentType === "membership_initial_payment" ||
-    nextPaymentType === "membership_monthly_payment"
-  ) {
-    setCreditHandling("adds_in_studio_credit");
-  }
+  // Payment-plan selections are requests, not authorization or confirmation.
+  // Never add Studio Credit automatically based on a selected payment type.
+  setCreditHandling("none");
 }
 
 function handlePaymentMethodChange(nextPaymentMethod) {
@@ -449,6 +450,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
 
   function handleSelectPayment(payment) {
     setSelectedPaymentId(payment.id);
+    setEditReceiptAcknowledged(false);
     setSelectedStatusDraft(payment.status || "paid");
     setSelectedNotesDraft(payment.adminReview?.internalNotes || "");
     setSelectedReferenceDraft(payment.reference || "");
@@ -492,6 +494,16 @@ function handlePaymentMethodChange(nextPaymentMethod) {
     }
 
     const amountCents = dollarsToCents(amountDollars);
+    const validationError = validateManualRecord({
+      status: paymentStatus,
+      creditHandling,
+      reference: paymentReference,
+      acknowledged: receiptAcknowledged,
+    });
+    if (validationError) {
+      setActionError(validationError);
+      return;
+    }
 
     if (!amountCents || amountCents <= 0) {
       setActionError("Enter a payment amount greater than $0.");
@@ -547,8 +559,14 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         amountDisplay: formatMoneyFromCents(amountCents),
         currency: "CAD",
 
-        receivedAt,
+        receivedAt: isReceivedStatus(paymentStatus) ? receivedAt : null,
         reference: paymentReference.trim(),
+        manualReconciliation: {
+          status: isReceivedStatus(paymentStatus) ? "studio_confirmed" : "unconfirmed",
+          // A studio-attested record is not an API-confirmed Square payment.
+          acknowledgedBy: isReceivedStatus(paymentStatus) ? user.email : null,
+          acknowledgedAt: isReceivedStatus(paymentStatus) ? serverTimestamp() : null,
+        },
 
         afterpayPolicy: {
           studioCapCents: 40000,
@@ -565,7 +583,9 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         updatedAt: serverTimestamp(),
       });
 
-      setActionSuccess("Payment recorded.");
+      setActionSuccess(isReceivedStatus(paymentStatus)
+        ? "Studio-confirmed payment recorded. Review any Studio Credit effects."
+        : "Pending payment request recorded. No payment or Studio Credit has been confirmed.");
       setAmountDollars("");
       setPaymentReference("");
       setPaymentNotes("");
@@ -574,7 +594,8 @@ function handlePaymentMethodChange(nextPaymentMethod) {
       setPaymentType("tattoo_session_payment");
       setPaymentMethod("etransfer");
       setCreditHandling("none");
-      setPaymentStatus("paid");
+      setPaymentStatus("pending");
+      setReceiptAcknowledged(false);
     } catch (error) {
       console.error(error);
       setActionError("Could not record payment.");
@@ -586,6 +607,20 @@ function handlePaymentMethodChange(nextPaymentMethod) {
   async function saveSelectedPayment() {
     if (!selectedPayment) return;
 
+    const upgradingToReceived = !isReceivedStatus(selectedPayment.status) && isReceivedStatus(selectedStatusDraft);
+    if (upgradingToReceived) {
+      const error = validateManualRecord({
+        status: selectedStatusDraft,
+        creditHandling: selectedPayment.creditHandling || "none",
+        reference: selectedReferenceDraft,
+        acknowledged: editReceiptAcknowledged,
+      });
+      if (error) {
+        setActionError(error);
+        return;
+      }
+    }
+
     setIsSaving(true);
     setActionError("");
     setActionSuccess("");
@@ -596,6 +631,12 @@ function handlePaymentMethodChange(nextPaymentMethod) {
       await updateDoc(paymentRef, {
         status: selectedStatusDraft,
         reference: selectedReferenceDraft,
+        ...(upgradingToReceived ? {
+          receivedAt: new Date(),
+          "manualReconciliation.status": "studio_confirmed",
+          "manualReconciliation.acknowledgedBy": user.email,
+          "manualReconciliation.acknowledgedAt": serverTimestamp(),
+        } : {}),
         "adminReview.internalNotes": selectedNotesDraft,
         "adminReview.lastUpdatedBy": user.email,
         "adminReview.lastUpdatedAt": serverTimestamp(),
@@ -757,9 +798,20 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         </div>
       </section>
 
+      <AdminSquareInvoiceAssistant
+        clients={clients}
+        selectedClientKey={paymentClientKey}
+        onChooseClient={handleClientChange}
+        amountDollars={amountDollars}
+        onAmountChange={setAmountDollars}
+      />
+      <p className="mx-auto mb-4 w-full max-w-[1400px] text-sm text-white/65">
+        The totals below are historical studio-entered records, not independently verified Square deposits.
+        Existing ledger entries are unchanged.
+      </p>
       <section className="payment-summary-grid">
         <article className="portal-stat-card">
-          <p>Total Recorded</p>
+          <p>Manually Recorded Received</p>
           <strong>{formatMoneyFromCents(totals.totalRecordedCents)}</strong>
         </article>
 
@@ -870,7 +922,12 @@ function handlePaymentMethodChange(nextPaymentMethod) {
         <section className="application-detail-panel">
           <article className="admin-card payment-create-card">
             <p className="eyebrow">Record Payment</p>
-            <h2>Add a payment or in-studio credit transaction</h2>
+            <h2>Record a pending request or verified receipt</h2>
+            <p className="mb-3 text-sm text-white/75">
+              New records default to Pending and do not change Studio Credit. For payments already
+              received, verify the money in Square or your bank first, then enter the receipt reference
+              and explicitly acknowledge the verification.
+            </p>
 
             <form className="admin-form payment-form" onSubmit={createPayment}>
               <label>
@@ -954,6 +1011,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                 Credit Handling
                 <select
                   value={creditHandling}
+                  disabled={!isReceivedStatus(paymentStatus)}
                   onChange={(event) => setCreditHandling(event.target.value)}
                 >
                   {creditHandlingOptions.map((option) => (
@@ -968,7 +1026,11 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                 Status
                 <select
                   value={paymentStatus}
-                  onChange={(event) => setPaymentStatus(event.target.value)}
+                  onChange={(event) => {
+                    setPaymentStatus(event.target.value);
+                    setReceiptAcknowledged(false);
+                    if (!isReceivedStatus(event.target.value)) setCreditHandling("none");
+                  }}
                 >
                   {paymentStatusOptions.map((status) => (
                     <option key={status.value} value={status.value}>
@@ -1027,6 +1089,15 @@ function handlePaymentMethodChange(nextPaymentMethod) {
                 another method.
               </div>
 
+              {isReceivedStatus(paymentStatus) && (
+                <label className="flex items-start gap-3 text-sm font-bold">
+                  <input type="checkbox" checked={receiptAcknowledged}
+                    onChange={(event) => setReceiptAcknowledged(event.target.checked)} />
+                  I verified this money was received in Square Dashboard, my bank or the cash register.
+                  I have entered its receipt/transaction reference. This is a manual studio confirmation,
+                  not automatic Square verification.
+                </label>
+              )}
               <button
                 className="button button-primary"
                 type="submit"
