@@ -604,13 +604,13 @@ function AdminConsults() {
             <p>{filteredConsults.length} of {triage.total}</p>
           </div>
           <div className="grid grid-cols-3 gap-2 p-2" aria-label="Consultation overview">
-            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => setStatusFilter("new")} aria-label="Show new consults">
+            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => { setStatusFilter("new"); setPlanFilter("all"); setInboxFilter("all"); setSearchText(""); }} aria-label="Show new consults">
               <strong className="block text-2xl">{triage.newCount}</strong><span className="text-xs">New</span>
             </button>
-            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => setStatusFilter("needs_review")} aria-label="Show consultations needing review">
+            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => { setStatusFilter("needs_review"); setPlanFilter("all"); setInboxFilter("all"); setSearchText(""); }} aria-label="Show consultations needing review">
               <strong className="block text-2xl">{triage.reviewCount}</strong><span className="text-xs">To review</span>
             </button>
-            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => setPlanFilter("any")} aria-label="Show payment plan requests">
+            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => { setPlanFilter("any"); setStatusFilter("all"); setInboxFilter("all"); setSearchText(""); }} aria-label="Show payment plan requests">
               <strong className="block text-2xl">{triage.planCount}</strong><span className="text-xs">Plan interest</span>
             </button>
           </div>
