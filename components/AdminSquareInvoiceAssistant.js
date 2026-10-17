@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { invoicePurposes, prepareSquareInvoiceDraft } from "@/lib/payments/squareInvoiceDraft.mjs";
+import { cadToCents, invoicePurposes, prepareSquareInvoiceDraft } from "@/lib/payments/squareInvoiceDraft.mjs";
+import { getFirebaseClient } from "@/lib/firebaseClient";
 
 // Admin-only helper rendered inside AdminPayments after Firebase admin authorization.
 // Clipboard copy is a draft, not a payment request sent, invoice created, or credit issued.
@@ -13,6 +14,51 @@ export default function AdminSquareInvoiceAssistant({
   const [description, setDescription] = useState("");
   const [copyState, setCopyState] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sandboxEnabled, setSandboxEnabled] = useState(false);
+  const [sandboxBusy, setSandboxBusy] = useState(false);
+  const [sandboxError, setSandboxError] = useState("");
+  const [sandboxResult, setSandboxResult] = useState(null);
+  const sandboxRequestId = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/admin/tattoo-checkout", { cache: "no-store" })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (active) setSandboxEnabled(data?.sandboxEnabled === true); })
+      .catch(() => { if (active) setSandboxEnabled(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function createSandboxLink() {
+    setSandboxError("");
+    if (!sandboxEnabled) return;
+    const amountCents = cadToCents(amountDollars);
+    if (!client || !client.clientEmail || !amountCents || !["tattoo_deposit", "tattoo_session", "consult"].includes(purpose)) {
+      setSandboxError("Select a client, approved purpose and valid CAD amount first.");
+      return;
+    }
+    setSandboxBusy(true);
+    try {
+      const { auth } = getFirebaseClient();
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw Error("Sign in to the Tattoo Portal again.");
+      sandboxRequestId.current ||= crypto.randomUUID();
+      const res = await fetch("/api/admin/tattoo-checkout", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ amountCents, purpose, idempotencyKey: sandboxRequestId.current, reviewed: true }),
+        cache: "no-store",
+      });
+      const result = await res.json();
+      if (!res.ok) throw Error("Sandbox link unavailable (" + (result.error || res.status) + ").");
+      setSandboxResult(result);
+    } catch (error) {
+      setSandboxError(error.message + " If uncertain, retry with the same details; the request ID remains unchanged.");
+    } finally {
+      setSandboxBusy(false);
+    }
+  }
+
   const client = clients.find((item) => item.key === selectedClientKey) || null;
 
   async function copyDetails() {
@@ -88,6 +134,31 @@ export default function AdminSquareInvoiceAssistant({
         </a>
         <Link className="button button-secondary" href="/admin/inbox">Open client inbox</Link>
       </div>
+      {sandboxEnabled && (
+        <div className="mt-5 rounded-2xl border border-dashed border-[#7676ff]/70 p-4">
+          <h3 className="text-lg font-bold">Square Sandbox · one-time checkout test</h3>
+          <p className="mt-2 text-sm text-white/70">
+            Developer test only: no real charges, no client invitation, no Studio Credit and no recurring billing.
+            After checking client, purpose, final amount and GST treatment, create a simulated Square checkout link.
+            No payment records are posted to Firebase.
+          </p>
+          {sandboxError && <p role="alert" className="mt-2 text-sm text-[#ffb5b5]">{sandboxError}</p>}
+          {sandboxResult ? (
+            <div className="mt-3 text-sm">
+              <p>Sandbox link created. Not a paid receipt or enrollment.</p>
+              <a className="underline" href={sandboxResult.checkoutUrl} target="_blank" rel="noopener noreferrer">
+                Open Square Sandbox checkout ↗
+              </a>
+              <button type="button" className="button button-secondary ml-3" onClick={() => {
+                sandboxRequestId.current = null; setSandboxResult(null); setSandboxError("");
+              }}>Start another test</button>
+            </div>
+          ) : (
+            <button className="button button-secondary mt-3" type="button" disabled={sandboxBusy}
+              onClick={createSandboxLink}>{sandboxBusy ? "Creating test link…" : "Create Sandbox payment link"}</button>
+          )}
+        </div>
+      )}
       <div className="mt-5 border-t border-white/15 pt-4 text-sm leading-6 text-white/75">
         <strong>To collect payment now:</strong> In Square Dashboard, go to Invoices, create a one-time invoice,
         review the client's email, price, approved terms and applicable tax, then send it through Square.
