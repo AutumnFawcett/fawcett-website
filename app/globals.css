@@ -5877,8 +5877,8 @@ img {
 .schedule-page .schedule-client-search-hint { margin-top: .45rem; color: #bdbdcf; font-size: .8rem; }
 .schedule-page .schedule-duration-readable { font-size: .85rem; color: #a8eac8; }
 
-@media (max-width: 800px) {
-  /* The booking flow goes first; appointment history stays accessible beneath. */
+@media (max-width: 1100px) {
+  /* When the layout stacks on phones/tablets, booking comes before history. */
   .schedule-page .schedule-booking-workspace { display: flex; flex-direction: column; }
   .schedule-page .schedule-booking-panel { order: 0; width: 100%; min-width: 0; }
   .schedule-page .schedule-appointments-list { order: 1; width: 100%; min-width: 0; }
