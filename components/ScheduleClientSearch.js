@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { filterScheduleClients } from "@/lib/scheduling/clientSearch.mjs";
 
 // Search only inside already-loaded, admin-authorized client records.
@@ -10,28 +10,27 @@ export default function ScheduleClientSearch({ clients, selectedClientKey, onCho
   const listId = useId();
   const inputRef = useRef(null);
   const selected = clients.find(client => client.key === selectedClientKey) || null;
-  const [term, setTerm] = useState("");
+  const [inputTerm, setInputTerm] = useState("");
+  const [editing, setEditing] = useState(false);
+  const term = editing ? inputTerm : selected
+    ? [selected.clientName, selected.clientEmail].filter(Boolean).join(" — ")
+    : "";
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const matches = useMemo(() => filterScheduleClients(clients, term), [clients, term]);
   const showingList = open && term.trim().length > 0;
   const highlightedClient = showingList ? matches[highlighted] : null;
 
-  useEffect(() => {
-    // Update the visible text when the selection or its loaded record changes.
-    // A subsequent user edit clears the selected client key before submission.
-    setTerm(selected ? [selected.clientName, selected.clientEmail].filter(Boolean).join(" — ") : "");
-  }, [selectedClientKey, selected?.clientName, selected?.clientEmail]);
-
   function selectClient(client) {
     onChooseClient(client.key);
-    setTerm([client.clientName, client.clientEmail].filter(Boolean).join(" — "));
+    setEditing(false);
     setOpen(false);
     setHighlighted(0);
   }
 
   function changeSearch(value) {
-    setTerm(value);
+    setInputTerm(value);
+    setEditing(true);
     setOpen(true);
     setHighlighted(0);
     if (selectedClientKey) onChooseClient("");
@@ -87,7 +86,7 @@ export default function ScheduleClientSearch({ clients, selectedClientKey, onCho
         />
         {selectedClientKey && (
           <button type="button" className="schedule-client-clear" aria-label="Clear selected client"
-            onClick={() => { onChooseClient(""); setTerm(""); setOpen(false); inputRef.current?.focus(); }}>
+            onClick={() => { onChooseClient(""); setInputTerm(""); setEditing(false); setOpen(false); inputRef.current?.focus(); }}>
             Clear
           </button>
         )}
