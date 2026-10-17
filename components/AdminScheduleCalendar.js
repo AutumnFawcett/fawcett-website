@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import styles from "./AdminScheduleCalendar.module.css";
 import {
   calendarDays, edmontonToday, edmontonWall, isSaturday,
   stepCalendarDate,
@@ -29,7 +30,7 @@ function AppointmentTile({ appointment, onOpen, style, className = "" }) {
   const color = appointment.assignedInbox === "ben" ? "ben" : appointment.assignedInbox === "autumn" ? "autumn" : "general";
   const start = edmontonWall(appointment.startAt).slice(11);
   return (
-    <button type="button" className={`fc-appointment fc-appointment-${color} ${cancelled ? "fc-cancelled" : ""} ${className}`}
+    <button type="button" className={[styles["fc-appointment"], styles["fc-appointment-" + color], cancelled ? styles["fc-cancelled"] : "", className].filter(Boolean).join(" ")}
       style={style} onClick={() => onOpen(appointment)}
       title={`${appointment.title || appointment.clientName || "Appointment"} · ${start} · ${appointment.status || "Tentative"}`}>
       <strong>{start} · {appointment.assignedInbox || "General"}</strong>
@@ -63,8 +64,8 @@ export default function AdminScheduleCalendar({
   }
 
   return (
-    <section className="fc-calendar" aria-label="Shared studio booking calendar">
-      <div className="fc-heading">
+    <section className={styles["fc-calendar"]} aria-label="Shared studio booking calendar">
+      <div className={styles["fc-heading"]}>
         <div>
           <p className="eyebrow">Fawcett Tattoos · Studio Operations</p>
           <h2>Book from the calendar.</h2>
@@ -73,24 +74,24 @@ export default function AdminScheduleCalendar({
         <a className="button button-primary" href="#schedule-create-appointment">+ New appointment</a>
       </div>
 
-      <div className="fc-toolbar">
-        <div className="fc-date-nav">
+      <div className={styles["fc-toolbar"]}>
+        <div className={styles["fc-date-nav"]}>
           <button type="button" aria-label="Previous period" onClick={() => onDate(stepCalendarDate(date, view, -1))}>←</button>
           <button type="button" onClick={() => onDate(today)}>Today</button>
           <button type="button" aria-label="Next period" onClick={() => onDate(stepCalendarDate(date, view, 1))}>→</button>
           <strong>{label}</strong>
         </div>
-        <div className="fc-view-tabs" aria-label="Calendar view">
+        <div className={styles["fc-view-tabs"]} aria-label="Calendar view">
           {["day", "week", "month"].map(option => (
             <button key={option} type="button" aria-pressed={view === option}
-              className={view === option ? "active" : ""} onClick={() => onView(option)}>
+              className={view === option ? styles.active : ""} onClick={() => onView(option)}>
               {option[0].toUpperCase() + option.slice(1)}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="fc-filters">
+      <div className={styles["fc-filters"]}>
         <label>Jump to date
           <input type="date" value={date} onChange={event => onDate(event.target.value)} />
         </label>
@@ -106,17 +107,17 @@ export default function AdminScheduleCalendar({
         </label>
       </div>
 
-      <div className="fc-legend" aria-label="Calendar legend">
-        <span className="fc-dot fc-dot-ben"/>Ben
-        <span className="fc-dot fc-dot-autumn"/>Autumn
-        <span className="fc-dot fc-dot-general"/>Unassigned
-        <span className="fc-dot fc-dot-available"/>Potentially open
+      <div className={styles["fc-legend"]} aria-label="Calendar legend">
+        <span className={[styles["fc-dot"], styles["fc-dot-ben"]].join(" ")}/>Ben
+        <span className={[styles["fc-dot"], styles["fc-dot-autumn"]].join(" ")}/>Autumn
+        <span className={[styles["fc-dot"], styles["fc-dot-general"]].join(" ")}/>Unassigned
+        <span className={[styles["fc-dot"], styles["fc-dot-available"]].join(" ")}/>Potentially open
       </div>
 
       {view !== "month" && (
-        <div className="fc-day-strip" aria-label="Choose day">
+        <div className={styles["fc-day-strip"]} aria-label="Choose day">
           {weekDays.map(day => (
-            <button type="button" key={day} aria-pressed={date === day} className={date === day ? "active" : ""}
+            <button type="button" key={day} aria-pressed={date === day} className={date === day ? styles.active : ""}
               onClick={() => onDate(day)}>
               <small>{calendarLabel(day, { weekday: "short" })}</small>
               <strong>{day.slice(-2)}</strong>
@@ -127,11 +128,11 @@ export default function AdminScheduleCalendar({
       )}
 
       {view === "month" && (
-        <div className="fc-month-grid" aria-label="Month calendar">
+        <div className={styles["fc-month-grid"]} aria-label="Month calendar">
           {displayedDays.map(day => {
             const count = countAppointmentsForDay(appointments, day);
             return <button type="button" key={day} onClick={() => jumpDay(day)}
-              className={`fc-month-day ${day === today ? "today" : ""} ${day.slice(0,7) !== date.slice(0,7) ? "outside" : ""}`}>
+              className={[styles["fc-month-day"], day === today ? styles.today : "", day.slice(0,7) !== date.slice(0,7) ? styles.outside : ""].filter(Boolean).join(" ")}>
               <small>{calendarLabel(day, { weekday: "short" })}</small>
               <strong>{Number(day.slice(-2))}</strong>
               <span>{isSaturday(day) ? "Closed" : count ? `${count} booked` : "—"}</span>
@@ -141,46 +142,46 @@ export default function AdminScheduleCalendar({
       )}
 
       {view !== "month" && (
-        <div className="fc-week-timeline" aria-label={view === "day" ? "Daily appointment timeline" : "Weekly appointment timeline"}>
-          <div className="fc-hours">
+        <div className={styles["fc-week-timeline"]} aria-label={view === "day" ? "Daily appointment timeline" : "Weekly appointment timeline"}>
+          <div className={styles["fc-hours"]}>
             {timeLabels.map((time, i) => <span key={time} style={{ top: `${(i / 9) * 100}%` }}>{time}</span>)}
           </div>
           {(view === "day" ? [date] : displayedDays).map(day => {
             const entries = appointmentsForDay(appointments, day, artist);
-            return <div className="fc-timeline-column" key={day}>
-              <button type="button" className="fc-timeline-day-title" onClick={() => jumpDay(day)}>
+            return <div className={styles["fc-timeline-column"]} key={day}>
+              <button type="button" className={styles["fc-timeline-day-title"]} onClick={() => jumpDay(day)}>
                 {calendarLabel(day, { weekday: "short", month: "short", day: "numeric" })}
                 {isSaturday(day) && " · Closed"}
               </button>
-              <div className={`fc-timeline-track ${isSaturday(day) ? "closed" : ""}`}>
+              <div className={[styles["fc-timeline-track"], isSaturday(day) ? styles.closed : ""].filter(Boolean).join(" ")}>
                 {entries.map(entry => {
                   const placement = timelinePlacement(entry);
                   if (!placement) return null;
                   return <AppointmentTile key={entry.id} appointment={entry} onOpen={onOpenAppointment}
-                    className="fc-positioned" style={{ top: `${placement.top}%`, height: `${placement.height}%` }}/>;
+                    className={styles["fc-positioned"]} style={{ top: `${placement.top}%`, height: `${placement.height}%` }}/>;
                 })}
               </div>
               {entries.some(entry => !timelinePlacement(entry)) && (
-                <p className="fc-outside-hours">{entries.filter(entry => !timelinePlacement(entry)).length} historical item(s) outside displayed hours — see agenda below</p>
+                <p className={styles["fc-outside-hours"]}>{entries.filter(entry => !timelinePlacement(entry)).length} historical item(s) outside displayed hours — see agenda below</p>
               )}
             </div>;
           })}
         </div>
       )}
 
-      <div className="fc-mobile-agenda" aria-label="Appointments for selected day">
-        <div className="fc-section-heading">
+      <div className={styles["fc-mobile-agenda"]} aria-label="Appointments for selected day">
+        <div className={styles["fc-section-heading"]}>
           <h3>{calendarLabel(date, { weekday: "long", month: "long", day: "numeric" })}</h3>
           <span>{focusedAppointments.length} appointments</span>
         </div>
         {focusedAppointments.length === 0
-          ? <p className="fc-empty">No appointments listed for this day and artist.</p>
-          : <div className="fc-agenda-list">{focusedAppointments.map(entry =>
+          ? <p className={styles["fc-empty"]}>No appointments listed for this day and artist.</p>
+          : <div className={styles["fc-agenda-list"]}>{focusedAppointments.map(entry =>
             <AppointmentTile key={entry.id} appointment={entry} onOpen={onOpenAppointment}/>)}</div>}
       </div>
 
-      <div className="fc-slots" aria-label="Choose potential booking time">
-        <div className="fc-section-heading">
+      <div className={styles["fc-slots"]} aria-label="Choose potential booking time">
+        <div className={styles["fc-section-heading"]}>
           <div>
             <h3>Choose a start time</h3>
             <p>{calendarLabel(date, { weekday: "long", month: "short", day: "numeric" })} · {durationOptions.find(d => d.value === String(durationMinutes))?.label || durationMinutes + " min"}</p>
@@ -188,15 +189,15 @@ export default function AdminScheduleCalendar({
           <strong>{availableCount} potentially open</strong>
         </div>
         {isSaturday(date) ? (
-          <p className="fc-empty">Saturdays are closed. Select Sunday–Friday.</p>
+          <p className={styles["fc-empty"]}>Saturdays are closed. Select Sunday–Friday.</p>
         ) : !slots.length ? (
-          <p className="fc-empty">There are no valid start times for this session length.</p>
+          <p className={styles["fc-empty"]}>There are no valid start times for this session length.</p>
         ) : (
-          <div className="fc-slot-grid">
+          <div className={styles["fc-slot-grid"]}>
             {slots.map(slot => {
               const active = selectedSlot?.day === slot.day && selectedSlot?.time === slot.time;
               return <button key={slot.time} type="button" disabled={!slot.available}
-                className={`fc-slot ${active ? "selected" : ""}`}
+                className={[styles["fc-slot"], active ? styles.selected : ""].filter(Boolean).join(" ")}
                 aria-pressed={slot.available ? active : undefined}
                 title={slot.reason}
                 onClick={() => onChooseSlot(slot.day, slot.time)}>
@@ -206,7 +207,7 @@ export default function AdminScheduleCalendar({
             })}
           </div>
         )}
-        <p className="fc-disclaimer">*Slots are suggestions from current studio records, not confirmed availability. All bookings require a client and a fresh conflict check when saved. Both artists share one chair; filtering by artist never frees occupied time. Existing Apple Calendar events are not synced, and simultaneous bookings are not transaction-locked.</p>
+        <p className={styles["fc-disclaimer"]}>*Slots are suggestions from current studio records, not confirmed availability. All bookings require a client and a fresh conflict check when saved. Both artists share one chair; filtering by artist never frees occupied time. Existing Apple Calendar events are not synced, and simultaneous bookings are not transaction-locked.</p>
       </div>
     </section>
   );
