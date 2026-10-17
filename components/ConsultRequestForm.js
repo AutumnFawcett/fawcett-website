@@ -15,6 +15,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseClient";
+import { paymentPlans, getPaymentPlan, consultationBudget } from "@/lib/paymentPlans.mjs";
 
 const initialForm = {
   fullName: "",
@@ -99,7 +100,7 @@ ${form.referenceLinks || "Not provided"}
 `.trim();
 }
 
-export default function ConsultRequestForm() {
+export default function ConsultRequestForm({ initialPlan = "" }) {
   const router = useRouter();
 
   const [user, setUser] = useState(null);
@@ -108,6 +109,7 @@ export default function ConsultRequestForm() {
 
   const [authPassword, setAuthPassword] = useState("");
   const [form, setForm] = useState(initialForm);
+  const [planId, setPlanId] = useState(() => getPaymentPlan(initialPlan)?.id || "");
 
   const [authError, setAuthError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -213,7 +215,7 @@ export default function ConsultRequestForm() {
           approximateSize: form.approximateSize.trim(),
           colourPreference: form.colourPreference,
           styleDirection: form.styleDirection.trim(),
-          budgetRange: form.budgetRange.trim(),
+          budgetRange: consultationBudget(form.budgetRange, planId),
           availability: form.availability.trim(),
           referenceLinks: form.referenceLinks.trim(),
         },
@@ -242,7 +244,10 @@ export default function ConsultRequestForm() {
         updatedAt: serverTimestamp(),
       });
 
-      const summary = buildConsultSummary(form);
+      const summary = buildConsultSummary({
+        ...form,
+        budgetRange: consultationBudget(form.budgetRange, planId),
+      });
 
       const conversationRef = await addDoc(collection(db, "conversations"), {
         clientUid: user.uid,
@@ -306,6 +311,16 @@ export default function ConsultRequestForm() {
 
   return (
     <section className="consult-form-section">
+      <div className="consult-card">
+        <label className="application-form">
+          <span className="font-bold">Payment plan preference (optional)</span>
+          <select value={planId} onChange={(event) => setPlanId(event.target.value)} aria-describedby="plan-request-help">
+            <option value="">No plan preference / standard consultation</option>
+            {paymentPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} — {plan.initial} initial + {plan.monthly}/month</option>)}
+          </select>
+        </label>
+        <p id="plan-request-help" className="mt-3 text-sm leading-6">This preference accompanies your consultation for studio review. No payment is collected, no subscription is activated, and no booking is guaranteed. Payments are intended to become dollar-for-dollar Fawcett Studio Credit, subject to final disclosed terms.</p>
+      </div>
       {!user ? (
         <div className="consult-card">
           <p className="eyebrow">Tattoo Portal Login</p>
