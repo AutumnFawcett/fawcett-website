@@ -13,6 +13,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocsFromServer,
   onSnapshot,
   query,
   serverTimestamp,
@@ -20,6 +21,10 @@ import {
 } from "firebase/firestore";
 import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
+import {
+  calendarDays, edmontonToday, edmontonWall, findChairConflicts, stepCalendarDate,
+  toMillis, validateChairSlot,
+} from "@/lib/scheduling/sharedChair.mjs";
 
 const appointmentStatusOptions = [
   { value: "tentative", label: "Tentative" },
@@ -47,7 +52,7 @@ const artistOptions = [
 ];
 
 function getTodayInputValue() {
-  return new Date().toISOString().slice(0, 10);
+  return edmontonToday();
 }
 
 function timestampToMillis(timestamp) {
@@ -70,6 +75,7 @@ function formatDate(timestamp) {
   if (!millis) return "No date";
 
   return new Date(millis).toLocaleString("en-CA", {
+    timeZone: "America/Edmonton",
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -121,13 +127,16 @@ function AdminSchedule() {
 
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [calendarView, setCalendarView] = useState("week");
+  const [calendarDate, setCalendarDate] = useState(getTodayInputValue());
+  const [calendarArtist, setCalendarArtist] = useState("all");
 
   const [appointmentClientKey, setAppointmentClientKey] = useState("");
   const [appointmentProjectId, setAppointmentProjectId] = useState("");
   const [appointmentType, setAppointmentType] = useState("consult");
   const [appointmentArtist, setAppointmentArtist] = useState("general");
   const [appointmentDate, setAppointmentDate] = useState(getTodayInputValue());
-  const [appointmentStartTime, setAppointmentStartTime] = useState("10:00");
+  const [appointmentStartTime, setAppointmentStartTime] = useState("11:00");
   const [durationMinutes, setDurationMinutes] = useState("60");
   const [appointmentTitle, setAppointmentTitle] = useState("");
   const [appointmentLocation, setAppointmentLocation] = useState(
@@ -197,6 +206,22 @@ function AdminSchedule() {
       a.clientName.localeCompare(b.clientName)
     );
   }, [clientProfiles, consults, applications, projects]);
+
+  const visibleCalendarDays = useMemo(() => calendarDays(calendarDate, calendarView), [calendarDate, calendarView]);
+  const appointmentsByDay = useMemo(() => {
+    const grouped = new Map();
+    for (const appointment of appointments) {
+      if (calendarArtist !== "all" && appointment.assignedInbox !== calendarArtist) continue;
+      const day = edmontonWall(appointment.startAt).slice(0, 10);
+      if (!day) continue;
+      if (!grouped.has(day)) grouped.set(day, []);
+      grouped.get(day).push(appointment);
+    }
+    for (const entries of grouped.values()) {
+      entries.sort((a, b) => toMillis(a.startAt) - toMillis(b.startAt));
+    }
+    return grouped;
+  }, [appointments, calendarArtist]);
 
   const selectedAppointment = useMemo(() => {
     return (
@@ -397,20 +422,17 @@ function AdminSchedule() {
     }
 
     const durationNumber = Number(durationMinutes);
-
-    if (!appointmentDate || !appointmentStartTime || !durationNumber) {
-      setActionError("Add a date, start time, and duration.");
+    const slot = validateChairSlot({
+      date: appointmentDate, time: appointmentStartTime,
+      durationMinutes: durationNumber, appointments,
+    });
+    if (!slot.ok) {
+      setActionError(slot.message);
       return;
     }
 
-    const startAt = new Date(`${appointmentDate}T${appointmentStartTime}:00`);
-
-    if (Number.isNaN(startAt.getTime())) {
-      setActionError("The appointment date or time is invalid.");
-      return;
-    }
-
-    const endAt = new Date(startAt.getTime() + durationNumber * 60 * 1000);
+    const startAt = slot.start;
+    const endAt = slot.end;
 
     const selectedProject = projects.find(
       (project) => project.id === appointmentProjectId
@@ -423,6 +445,19 @@ function AdminSchedule() {
     setActionSuccess("");
 
     try {
+      // Re-read from the server immediately before writing. This guards against
+      // stale local snapshots, but it is not an atomic multi-admin reservation.
+      const fresh = await getDocsFromServer(collection(db, "appointments"));
+      const liveAppointments = fresh.docs.map((snap) => ({ id: snap.id, ...snap.data() }));
+      const latestSlot = validateChairSlot({
+        date: appointmentDate, time: appointmentStartTime,
+        durationMinutes: durationNumber, appointments: liveAppointments,
+      });
+      if (!latestSlot.ok) {
+        setActionError(latestSlot.message);
+        return;
+      }
+
       await addDoc(collection(db, "appointments"), {
         clientUid: client.clientUid,
         clientName: client.clientName || "",
@@ -465,7 +500,8 @@ function AdminSchedule() {
       setAppointmentProjectId("");
       setAppointmentType("consult");
       setAppointmentDate(getTodayInputValue());
-      setAppointmentStartTime("10:00");
+      setCalendarDate(appointmentDate);
+      setAppointmentStartTime("11:00");
       setDurationMinutes("60");
     } catch (error) {
       console.error(error);
@@ -483,6 +519,22 @@ function AdminSchedule() {
     setActionSuccess("");
 
     try {
+      // Reactivating a cancelled slot must not silently double-book the chair.
+      if (selectedAppointment.status === "cancelled" && statusDraft !== "cancelled") {
+        const start = toMillis(selectedAppointment.startAt);
+        const end = toMillis(selectedAppointment.endAt);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+          setActionError("Cannot reactivate an appointment with an invalid time range.");
+          return;
+        }
+        const latest = await getDocsFromServer(collection(db, "appointments"));
+        const records = latest.docs.map((snap) => ({ id: snap.id, ...snap.data() }));
+        if (findChairConflicts(records, start, end, selectedAppointment.id).length) {
+          setActionError("This appointment conflicts with another booking for the shared studio chair.");
+          return;
+        }
+      }
+
       const appointmentRef = doc(
         db,
         "appointments",
@@ -656,6 +708,64 @@ function AdminSchedule() {
         </div>
       </section>
 
+      <section className="mx-auto mb-6 w-full rounded-3xl border border-white/15 bg-white/[0.045] p-4 sm:p-6" aria-label="Shared studio calendar">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="eyebrow">One Studio Room · Two Artists</p>
+            <h2 className="text-2xl font-black md:text-3xl">Shared-chair calendar</h2>
+            <p className="mt-2 text-sm text-white/70">Sunday–Friday, 11 AM–8 PM Edmonton time. Saturdays closed. All appointments reserve the same studio room.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className="button button-secondary" onClick={() => setCalendarDate(stepCalendarDate(calendarDate, calendarView, -1))} aria-label="Previous calendar period">←</button>
+            <button type="button" className="button button-secondary" onClick={() => setCalendarDate(getTodayInputValue())}>Today</button>
+            <button type="button" className="button button-secondary" onClick={() => setCalendarDate(stepCalendarDate(calendarDate, calendarView, 1))} aria-label="Next calendar period">→</button>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="grid gap-1 text-sm font-bold">Calendar date
+            <input className="rounded-xl border border-white/20 bg-black p-3 text-white" type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} />
+          </label>
+          <label className="grid gap-1 text-sm font-bold">View
+            <select className="rounded-xl border border-white/20 bg-black p-3 text-white" value={calendarView} onChange={(event) => setCalendarView(event.target.value)}>
+              <option value="day">Day</option><option value="week">Week</option><option value="month">Month</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm font-bold">Artist
+            <select className="rounded-xl border border-white/20 bg-black p-3 text-white" value={calendarArtist} onChange={(event) => setCalendarArtist(event.target.value)}>
+              <option value="all">Both artists</option>
+              {artistOptions.map((artist) => <option key={artist.value} value={artist.value}>{artist.label}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className={`mt-4 grid gap-2 ${calendarView === "day" ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-7"}`}>
+          {visibleCalendarDays.map((day) => {
+            const entries = appointmentsByDay.get(day) || [];
+            const saturday = new Date(day + "T12:00:00Z").getUTCDay() === 6;
+            return (
+              <div key={day} className={`min-w-0 rounded-xl border p-3 ${saturday ? "border-white/10 bg-white/[0.02]" : "border-white/20 bg-black/50"}`}>
+                <button type="button" className="mb-3 block w-full text-left text-sm font-bold underline-offset-4 hover:underline"
+                  onClick={() => { setCalendarDate(day); setCalendarView("day"); setAppointmentDate(day); }}
+                  title="Select this day for an appointment">
+                  {new Date(day + "T12:00:00Z").toLocaleDateString("en-CA", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" })}
+                  {saturday ? " · Closed" : ""}
+                </button>
+                <div className="grid gap-2">
+                  {entries.length === 0 ? <p className="text-xs text-white/45">No appointments</p> : entries.map((entry) => (
+                    <button key={entry.id} type="button" className="min-w-0 rounded-lg border border-[#4444ff]/35 bg-[#0000cc]/15 p-2 text-left text-xs hover:border-[#7777ff]"
+                      onClick={() => handleSelectAppointment(entry)}>
+                      <strong className="block">{edmontonWall(entry.startAt).slice(11)} · {entry.assignedInbox || "General"}</strong>
+                      <span className="mt-1 block break-words">{entry.title || entry.clientName || "Appointment"}</span>
+                      <span className="mt-1 block text-white/60">{formatValue(entry.status || "tentative")}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-4 text-xs leading-5 text-white/60">Conflict checks prevent ordinary overlapping manual bookings across both artists. They are not an atomic lock if two administrators book simultaneously. Existing external Apple Calendar events are not synced.</p>
+      </section>
+
       <section className="admin-applications-layout">
         <aside className="applications-list-panel">
           <div className="panel-heading">
@@ -733,6 +843,7 @@ function AdminSchedule() {
           <article className="admin-card schedule-create-card">
             <p className="eyebrow">Create Appointment</p>
             <h2>Book a client into the studio schedule</h2>
+            <p className="mb-4 text-sm text-white/70">Shared chair: Sunday–Friday, 11 AM–8 PM Edmonton time. Overlapping bookings are blocked using existing appointments and a fresh server check. Holidays require manual review.</p>
 
            <form className="admin-form schedule-form" onSubmit={createAppointment}>
               <label>
