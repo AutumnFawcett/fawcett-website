@@ -260,8 +260,8 @@ function ConsultRequestForm({ initialPlan = "" }) {
 
   return (
     <section className="consult-form-section">
-      <div className="consult-card">
-        <label className="application-form">
+      <div className="consult-card" style={{ marginBottom: "1.25rem" }}>
+        <label className="application-form" style={{ marginTop: 0 }}>
           <span className="font-bold">Payment plan preference (optional)</span>
           <select value={planId} onChange={(event) => setPlanId(event.target.value)} aria-describedby="plan-request-help">
             <option value="">No plan preference / standard consultation</option>
