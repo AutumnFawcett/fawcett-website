@@ -22,6 +22,7 @@ import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
 import AdminSquareInvoiceAssistant from "@/components/AdminSquareInvoiceAssistant";
 import { isReceivedStatus, validateManualRecord } from "@/lib/payments/manualReconciliation.mjs";
+import { cadToCents } from "@/lib/payments/squareInvoiceDraft.mjs";
 
 const paymentTypeOptions = [
   { value: "consult_fee", label: "Consult Fee" },
@@ -116,14 +117,6 @@ function formatMoneyFromCents(cents) {
     style: "currency",
     currency: "CAD",
   }).format(amount);
-}
-
-function dollarsToCents(value) {
-  const numberValue = Number(value);
-
-  if (!Number.isFinite(numberValue)) return 0;
-
-  return Math.round(numberValue * 100);
 }
 
 function getClientKey(record) {
@@ -494,7 +487,7 @@ function handlePaymentMethodChange(nextPaymentMethod) {
       return;
     }
 
-    const amountCents = dollarsToCents(amountDollars);
+    const amountCents = cadToCents(amountDollars);
     const validationError = validateManualRecord({
       status: paymentStatus,
       creditHandling,
