@@ -22,6 +22,8 @@ import {
 import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
 import AdminScheduleCalendar from "@/components/AdminScheduleCalendar";
+import ScheduleClientSearch from "@/components/ScheduleClientSearch";
+import { formatBookingDuration } from "@/lib/scheduling/clientSearch.mjs";
 import {
   edmontonToday, findChairConflicts, toMillis, validateChairSlot,
 } from "@/lib/scheduling/sharedChair.mjs";
@@ -711,8 +713,8 @@ function AdminSchedule() {
         selectedSlot={selectedCalendarSlot}
       />
 
-      <section className="admin-applications-layout">
-        <aside className="applications-list-panel">
+      <section className="admin-applications-layout schedule-booking-workspace">
+        <aside className="applications-list-panel schedule-appointments-list">
           <div className="panel-heading">
             <h2>All Appointments</h2>
             <p>{filteredAppointments.length}</p>
@@ -762,7 +764,7 @@ function AdminSchedule() {
                       ? "application-card application-card-active"
                       : "application-card"
                   }
-                  onClick={() => handleSelectAppointment(appointment)}
+                  onClick={() => openCalendarAppointment(appointment)}
                 >
                   <div>
                     <strong>{appointment.title || "Appointment"}</strong>
@@ -786,7 +788,7 @@ function AdminSchedule() {
           )}
         </aside>
 
-        <section className="application-detail-panel">
+        <section className="application-detail-panel schedule-booking-panel">
           <article id="schedule-create-appointment" className="admin-card schedule-create-card">
             <p className="eyebrow">Create Appointment</p>
             <h2>Book a client into the studio schedule</h2>
@@ -799,21 +801,12 @@ function AdminSchedule() {
             <p className="mb-4 text-sm text-white/70">Shared chair: Sunday–Friday, 11 AM–8 PM Edmonton time. Overlapping bookings are blocked using existing appointments and a fresh server check. Holidays require manual review.</p>
 
            <form className="admin-form schedule-form" onSubmit={createAppointment}>
-              <label>
-                Client
-                <select
-                  value={appointmentClientKey}
-                  onChange={(event) => handleClientChange(event.target.value)}
-                  required
-                >
-                  <option value="">Choose client</option>
-                  {clients.map((client) => (
-                    <option key={client.key} value={client.key}>
-                      {client.clientName} — {client.clientEmail}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ScheduleClientSearch
+                clients={clients}
+                selectedClientKey={appointmentClientKey}
+                onChooseClient={handleClientChange}
+                disabled={isSaving}
+              />
 
               <label>
                 Related Project
@@ -891,7 +884,7 @@ function AdminSchedule() {
               </label>
 
               <label>
-                Duration Minutes
+                Duration (minutes)
                 <input
                   type="number"
                   min="15"
@@ -903,6 +896,11 @@ function AdminSchedule() {
                   }}
                   required
                 />
+                <span className="schedule-duration-readable" role="status">
+                  {formatBookingDuration(durationMinutes)
+                    ? `Appointment length: ${formatBookingDuration(durationMinutes)}`
+                    : "Enter a duration in minutes (15-minute increments)."}
+                </span>
               </label>
 
               <label>
