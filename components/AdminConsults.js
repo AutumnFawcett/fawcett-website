@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
+import { consultNeedsReview, consultPlanId, consultPlanLabel, consultTriageSummary, planFilterOptions } from "@/lib/admin/crmTriage.mjs";
 
 const consultStatusOptions = [
   { value: "new", label: "New" },
@@ -121,6 +122,7 @@ function AdminConsults() {
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [inboxFilter, setInboxFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
   const [searchText, setSearchText] = useState("");
 
   const [notesDraft, setNotesDraft] = useState("");
@@ -135,12 +137,18 @@ function AdminConsults() {
     return consults.find((consult) => consult.id === selectedConsultId) || null;
   }, [consults, selectedConsultId]);
 
+  const triage = useMemo(() => consultTriageSummary(consults), [consults]);
+
   const filteredConsults = useMemo(() => {
     const normalizedSearch = searchText.trim().toLowerCase();
 
     return consults
       .filter((consult) => {
-        if (statusFilter !== "all" && consult.status !== statusFilter) {
+        if (statusFilter === "needs_review" ? !consultNeedsReview(consult.status) : statusFilter !== "all" && (consult.status || "new") !== statusFilter) {
+          return false;
+        }
+        const plan = consultPlanId(consult.request?.budgetRange);
+        if (planFilter === "any" ? !plan : planFilter !== "all" && plan !== planFilter) {
           return false;
         }
 
@@ -170,7 +178,7 @@ function AdminConsults() {
         (a, b) =>
           timestampToMillis(b.createdAt) - timestampToMillis(a.createdAt)
       );
-  }, [consults, statusFilter, inboxFilter, searchText]);
+  }, [consults, statusFilter, inboxFilter, planFilter, searchText]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -593,7 +601,18 @@ function AdminConsults() {
         <aside className="applications-list-panel">
           <div className="panel-heading">
             <h2>Consults</h2>
-            <p>{filteredConsults.length}</p>
+            <p>{filteredConsults.length} of {triage.total}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 p-2" aria-label="Consultation overview">
+            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => { setStatusFilter("new"); setPlanFilter("all"); setInboxFilter("all"); setSearchText(""); }} aria-label="Show new consults">
+              <strong className="block text-2xl">{triage.newCount}</strong><span className="text-xs">New</span>
+            </button>
+            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => { setStatusFilter("needs_review"); setPlanFilter("all"); setInboxFilter("all"); setSearchText(""); }} aria-label="Show consultations needing review">
+              <strong className="block text-2xl">{triage.reviewCount}</strong><span className="text-xs">To review</span>
+            </button>
+            <button type="button" className="rounded-xl border border-white/15 p-3 text-left" onClick={() => { setPlanFilter("any"); setStatusFilter("all"); setInboxFilter("all"); setSearchText(""); }} aria-label="Show payment plan requests">
+              <strong className="block text-2xl">{triage.planCount}</strong><span className="text-xs">Plan interest</span>
+            </button>
           </div>
 
           <div className="admin-filters">
@@ -614,6 +633,7 @@ function AdminConsults() {
                 onChange={(event) => setStatusFilter(event.target.value)}
               >
                 <option value="all">All statuses</option>
+                <option value="needs_review">Needs review</option>
                 {consultStatusOptions.map((status) => (
                   <option key={status.value} value={status.value}>
                     {status.label}
@@ -634,6 +654,14 @@ function AdminConsults() {
                     {inbox.label}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label>
+              Payment plan
+              <select value={planFilter} onChange={(event) => setPlanFilter(event.target.value)}>
+                <option value="all">All consults</option>
+                <option value="any">Any plan request</option>
+                {planFilterOptions.map((plan) => <option key={plan.value} value={plan.value}>{plan.label}</option>)}
               </select>
             </label>
           </div>
@@ -668,6 +696,7 @@ function AdminConsults() {
                   <div className="application-card-meta">
                     <small>{formatValue(consult.request?.projectType)}</small>
                     <small>{getStatusLabel(consult.status || "new")}</small>
+                    {consultPlanLabel(consult.request?.budgetRange) && <small>Plan: {consultPlanLabel(consult.request?.budgetRange)} (requested)</small>}
                   </div>
 
                   <small>{formatDate(consult.createdAt)}</small>
@@ -695,12 +724,20 @@ function AdminConsults() {
                   <h2>{selectedConsult.clientName || "Unnamed client"}</h2>
                   <p>{selectedConsult.clientEmail}</p>
                   <p>Submitted: {formatDate(selectedConsult.createdAt)}</p>
+                  {consultPlanLabel(selectedConsult.request?.budgetRange) && (
+                    <p className="mt-2 font-bold text-white">Payment plan interest: {consultPlanLabel(selectedConsult.request?.budgetRange)} — request only, not enrolled or paid.</p>
+                  )}
                 </div>
 
                 <div className="application-actions">
                   <Link className="button button-secondary" href="/admin/inbox">
                     Open Inbox
                   </Link>
+                  {selectedConsult.clientUid && (
+                    <Link className="button button-secondary" href={`/admin/clients?uid=${encodeURIComponent(selectedConsult.clientUid)}`}>
+                      Open Client File
+                    </Link>
+                  )}
 
                   <Link
                     className="button button-secondary"

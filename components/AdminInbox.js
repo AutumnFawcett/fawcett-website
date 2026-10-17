@@ -24,6 +24,11 @@ import { withFirebase } from "@/components/FirebaseFeature";
 
 const inboxes = [
   {
+    id: "all",
+    label: "All Inboxes",
+    description: "All client conversations, including unassigned requests.",
+  },
+  {
     id: "general",
     label: "General",
     description: "General questions and undecided clients.",
@@ -72,11 +77,13 @@ function AdminInbox() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [activeInbox, setActiveInbox] = useState("general");
+  const [activeInbox, setActiveInbox] = useState("all");
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
 
+  const [searchText, setSearchText] = useState("");
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [authError, setAuthError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -85,6 +92,16 @@ function AdminInbox() {
   const selectedInboxLabel = useMemo(() => {
     return inboxes.find((inbox) => inbox.id === activeInbox)?.label || "Inbox";
   }, [activeInbox]);
+
+  const unreadCount = useMemo(() => conversations.filter((item) => item.unreadForAdmin).length, [conversations]);
+  const visibleConversations = useMemo(() => {
+    const needle = searchText.trim().toLowerCase();
+    return conversations.filter((item) =>
+      (!unreadOnly || item.unreadForAdmin) &&
+      (!needle || [item.clientName, item.clientEmail, item.subject, item.lastMessagePreview]
+        .filter(Boolean).join(" ").toLowerCase().includes(needle))
+    );
+  }, [conversations, searchText, unreadOnly]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -117,10 +134,9 @@ function AdminInbox() {
 useEffect(() => {
   if (!user || !isAdmin) return;
 
-  const conversationsQuery = query(
-    collection(db, "conversations"),
-    where("assignedInbox", "==", activeInbox)
-  );
+  const conversationsQuery = activeInbox === "all"
+    ? query(collection(db, "conversations"))
+    : query(collection(db, "conversations"), where("assignedInbox", "==", activeInbox));
 
   const unsubscribe = onSnapshot(
     conversationsQuery,
@@ -452,7 +468,12 @@ useEffect(() => {
           <button
             key={inbox.id}
             type="button"
-            onClick={() => setActiveInbox(inbox.id)}
+            onClick={() => {
+               setActiveInbox(inbox.id);
+               setSelectedConversation(null);
+               setMessages([]);
+               setReplyText("");
+             }}
             className={
               activeInbox === inbox.id
                 ? "inbox-card inbox-card-active"
@@ -468,16 +489,28 @@ useEffect(() => {
         <section className="conversation-list-panel">
           <div className="panel-heading">
             <h2>{selectedInboxLabel}</h2>
-            <p>{conversations.length} conversation(s)</p>
+            <p>{visibleConversations.length} shown · {unreadCount} unread</p>
           </div>
 
+          <div className="grid gap-3 p-3">
+            <label className="grid gap-1 text-sm">
+              Search conversations
+              <input className="w-full rounded-xl border border-white/20 bg-black px-3 py-2" type="search"
+                value={searchText} onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Client, subject or message preview" />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={unreadOnly} onChange={(event) => setUnreadOnly(event.target.checked)} />
+              Show unread only
+            </label>
+          </div>
           {actionError && <p className="error-message">{actionError}</p>}
 
-          {conversations.length === 0 ? (
-            <p>No conversations in this inbox yet.</p>
+          {visibleConversations.length === 0 ? (
+            <p>No matching conversations. Try clearing the search or unread filter.</p>
           ) : (
             <div className="conversation-list">
-              {conversations.map((conversation) => (
+              {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.id}
                   type="button"
@@ -493,6 +526,7 @@ useEffect(() => {
                   </strong>
 
                   <span>{conversation.clientEmail}</span>
+                  {activeInbox === "all" && <small>Inbox: {conversation.assignedInbox || "Unassigned"}</small>}
 
                   <p>
                     {conversation.lastMessagePreview ||

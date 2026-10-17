@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/payment-plans/*.test.mjs",
+    "test": "node --test tests/payment-plans/*.test.mjs tests/admin-crm/*.test.mjs",
     "test:browser": "playwright test"
   },
   "dependencies": {
