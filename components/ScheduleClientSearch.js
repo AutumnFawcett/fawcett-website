@@ -90,6 +90,25 @@ export default function ScheduleClientSearch({ clients, selectedClientKey, onCho
             Clear
           </button>
         )}
+        {showingList && (
+                <div className="schedule-client-search-results" id={listId} role="listbox" aria-label="Matching clients">
+                  {matches.length ? matches.map((client, index) => (
+                    <button key={client.key} type="button" role="option"
+                      id={listId + "-item-" + index}
+                      aria-selected={index === highlighted}
+                      className={index === highlighted ? "schedule-client-result active" : "schedule-client-result"}
+                      onMouseDown={event => event.preventDefault()}
+                      onClick={() => selectClient(client)}>
+                      <strong>{client.clientName}</strong>
+                      <span>{client.clientEmail || client.phone || "No contact details"}</span>
+                    </button>
+                  )) : <p className="schedule-client-search-hint">No matching clients. Try a different name or email.</p>}
+                  {matches.length === 12 && (
+                    <p className="schedule-client-search-hint">Showing up to 12 matches. Keep typing to narrow the results.</p>
+                  )}
+                </div>
+              )}
+        
       </div>
       {selected && (
         <p className="schedule-client-search-selected" role="status">
@@ -97,24 +116,6 @@ export default function ScheduleClientSearch({ clients, selectedClientKey, onCho
         </p>
       )}
       {!selected && <p className="schedule-client-search-hint">Choose an existing client to enable booking. Type at least one character.</p>}
-      {showingList && (
-        <div className="schedule-client-search-results" id={listId} role="listbox" aria-label="Matching clients">
-          {matches.length ? matches.map((client, index) => (
-            <button key={client.key} type="button" role="option"
-              id={listId + "-item-" + index}
-              aria-selected={index === highlighted}
-              className={index === highlighted ? "schedule-client-result active" : "schedule-client-result"}
-              onMouseDown={event => event.preventDefault()}
-              onClick={() => selectClient(client)}>
-              <strong>{client.clientName}</strong>
-              <span>{client.clientEmail || client.phone || "No contact details"}</span>
-            </button>
-          )) : <p className="schedule-client-search-hint">No matching clients. Try a different name or email.</p>}
-          {matches.length === 12 && (
-            <p className="schedule-client-search-hint">Showing up to 12 matches. Keep typing to narrow the results.</p>
-          )}
-        </div>
-      )}
     </div>
   );
 }
