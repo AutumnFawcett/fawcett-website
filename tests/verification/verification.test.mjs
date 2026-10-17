@@ -107,7 +107,12 @@ test("cooldown survives browser reload and five-per-day budget survives address 
   }
   const denied = await call({ now: now + 5 * 60000 }); assert.equal(denied.status, 429);
   assert.ok((await denied.json()).retryAfter > 60000);
+  const originalUid = user.uid;
   await auth.updateUser(user.uid, { email: "changed-cooldown@example.test", emailVerified: false });
+  // Email changes can revoke the cached token at a second boundary. Reauthenticate
+  // so this test exercises the persistent UID budget, not token revocation timing.
+  await signInWithEmailAndPassword(ba, "changed-cooldown@example.test", password);
+  user = ba.currentUser; assert.equal(user.uid, originalUid);
   assert.equal((await call({ now: now + 6 * 60000 })).status, 429);
   assert.equal((await verificationLimit(db, user.uid, { now: now + 86400000 })).retryAfter, 0);
 });

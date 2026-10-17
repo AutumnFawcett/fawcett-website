@@ -1,5 +1,12 @@
 # Owner checklist — retained production backend (Phase 4A)
 
+> **Phase 9B identity correction / STOP:** the owner verified the live browser's
+> Firestore destination as `fawcett-website`. Both real projects contain potentially
+> production data; neither is an approved destination. The retained-sandbox identity
+> assumptions below are historical and must not authorize cutover or exclude the
+> other project's read-only inventory. Follow the [two-project audit and review
+> gates](two-project-read-only-audit.md). Production migration remains hard-disabled.
+
 > Phase 6A development update: [enforced fence and publication controls](write-fence-publication-controls.md)
 > supersedes earlier repository gap descriptions and cached-source-only behavior.
 > The live rules/writers are unverified and no production operation is authorized.

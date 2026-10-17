@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "auditVersion": "two-project-audit-v1",
+  "scanComplete": true,
+  "upgradeApproved": false,
+  "independentOwnerReviewRequired": true,
+  "projects": [
+    {
+      "project": {
+        "projectId": "demo-fawcett-audit-one",
+        "projectNumber": "100000000001",
+        "database": "(default)",
+        "region": "nam5"
+      },
+      "collections": {
+        "appointments": 1,
+        "clients": 1,
+        "consultRequests": 1,
+        "conversations": 1,
+        "messages": 1,
+        "paymentOrders": 1,
+        "paymentTransactions": 1,
+        "portalRecords.clients": 1,
+        "projects": 1,
+        "studioClients": 1,
+        "studioClients.audit": 1
+      },
+      "collectionCount": 12,
+      "topLevelCollectionCount": 10,
+      "topLevelDocumentCount": 9,
+      "documentCount": 11,
+      "authUserCount": 1,
+      "classes": {
+        "privateOnly": 4,
+        "sourceReviewRequired": 6,
+        "projectionReviewRequired": 1,
+        "conflicting": 0
+      },
+      "issues": {
+        "missingParents": 0,
+        "missingRelationships": 0,
+        "invalidRelationships": 0,
+        "conflictingOwners": 0,
+        "missingAuthOwners": 0,
+        "ambiguousOwnership": 0,
+        "disabledOwners": 0,
+        "orphanProjections": 0,
+        "projectionOwnerMismatches": 0,
+        "financialMissingReferences": 0,
+        "financialInvalidAmounts": 0,
+        "financialUnknownEnvironment": 0,
+        "financialEnvironmentMismatch": 0,
+        "financialParentMismatch": 0,
+        "financialAmountReviewRequired": 0,
+        "unverifiedProviderClaims": 0
+      },
+      "providerEnvironmentLabels": {
+        "sandbox": 2,
+        "production": 0,
+        "unknown": 0
+      },
+      "duplicateAuthEmailGroups": 0,
+      "duplicateAuthProviderGroups": 0,
+      "duplicateProviderTransactionGroups": 0,
+      "duplicateProviderOrderGroups": 0,
+      "contentReviewRequired": true
+    },
+    {
+      "project": {
+        "projectId": "demo-fawcett-audit-two",
+        "projectNumber": "100000000002",
+        "database": "(default)",
+        "region": "nam5"
+      },
+      "collections": {
+        "appointments": 1,
+        "clients": 1,
+        "consultRequests": 1,
+        "conversations": 1,
+        "messages": 1,
+        "paymentOrders": 1,
+        "paymentTransactions": 1,
+        "portalRecords.clients": 1,
+        "projects": 1,
+        "studioClients": 1,
+        "studioClients.audit": 1
+      },
+      "collectionCount": 12,
+      "topLevelCollectionCount": 10,
+      "topLevelDocumentCount": 9,
+      "documentCount": 11,
+      "authUserCount": 1,
+      "classes": {
+        "privateOnly": 4,
+        "sourceReviewRequired": 6,
+        "projectionReviewRequired": 1,
+        "conflicting": 0
+      },
+      "issues": {
+        "missingParents": 0,
+        "missingRelationships": 0,
+        "invalidRelationships": 0,
+        "conflictingOwners": 0,
+        "missingAuthOwners": 0,
+        "ambiguousOwnership": 0,
+        "disabledOwners": 0,
+        "orphanProjections": 0,
+        "projectionOwnerMismatches": 0,
+        "financialMissingReferences": 0,
+        "financialInvalidAmounts": 0,
+        "financialUnknownEnvironment": 0,
+        "financialEnvironmentMismatch": 0,
+        "financialParentMismatch": 0,
+        "financialAmountReviewRequired": 0,
+        "unverifiedProviderClaims": 0
+      },
+      "providerEnvironmentLabels": {
+        "sandbox": 2,
+        "production": 0,
+        "unknown": 0
+      },
+      "duplicateAuthEmailGroups": 0,
+      "duplicateAuthProviderGroups": 0,
+      "duplicateProviderTransactionGroups": 0,
+      "duplicateProviderOrderGroups": 0,
+      "contentReviewRequired": true
+    }
+  ],
+  "potentialCrossProjectCollisions": {
+    "authUids": 1,
+    "authEmails": 1,
+    "providerSubjects": 1,
+    "documentLocations": 11,
+    "providerTransactions": 1,
+    "providerPaymentIdentifiersAcrossEnvironments": 1,
+    "providerOrderIdentifiersAcrossEnvironments": 1,
+    "providerIdentifiersAcrossEnvironments": 1
+  }
+}

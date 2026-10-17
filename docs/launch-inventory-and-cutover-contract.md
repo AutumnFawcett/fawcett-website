@@ -1,5 +1,12 @@
 # Phase 9A — launch inventory and cutover contract
 
+> **Phase 9B identity correction / STOP:** the owner verified the live browser's
+> Firestore destination as `fawcett-website`. Both real projects contain potentially
+> production data; neither is an approved destination. The retained-sandbox identity
+> assumptions below are historical and must not authorize cutover or exclude the
+> other project's read-only inventory. Follow the [two-project audit and review
+> gates](two-project-read-only-audit.md). Production migration remains hard-disabled.
+
 Status: synthetic development preparation only, based on shared commit `a6ea36a`
 (merged #41–#45). Production remains `fawcett-website-sandbox`; the separate
 `fawcett-website` is untouched. No production access, credential selection, deployment,
