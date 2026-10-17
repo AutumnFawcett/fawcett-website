@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { getFirebaseClient } from "@/lib/firebaseClient";
 import { withFirebase } from "@/components/FirebaseFeature";
+import { consultPlanLabel, exactClientUidMatch } from "@/lib/admin/crmTriage.mjs";
 
 const clientStatusOptions = [
   { value: "lead", label: "Lead" },
@@ -236,7 +237,10 @@ function AdminClients() {
   }, [clientProfiles, applications, consults, projects, conversations]);
 
   const selectedClient = useMemo(() => {
-    return clients.find((client) => client.key === selectedClientKey) || null;
+    if (selectedClientKey) return clients.find((client) => client.key === selectedClientKey) || null;
+    // URL handoff is exact UID only. Never link clients by matching email/name.
+    const linkedUid = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("uid") : null;
+    return exactClientUidMatch(clients, linkedUid);
   }, [clients, selectedClientKey]);
 
   const filteredClients = useMemo(() => {
@@ -258,6 +262,7 @@ function AdminClients() {
         client.status,
         client.applications.map((item) => item.project?.tattooIdea).join(" "),
         client.consults.map((item) => item.request?.tattooIdea).join(" "),
+        client.consults.map((item) => item.request?.budgetRange).join(" "),
         client.projects.map((item) => item.projectName).join(" "),
       ]
         .filter(Boolean)
@@ -851,6 +856,7 @@ function AdminClients() {
 
                 <article className="detail-card detail-card-wide">
                   <h3>Consult Requests</h3>
+                  <p className="text-sm">Payment-plan preferences are requests only, not active billing or studio credit.</p>
 
                   {selectedClient.consults.length === 0 ? (
                     <p>No consult requests yet.</p>
@@ -862,6 +868,9 @@ function AdminClients() {
                             {formatValue(consult.request?.projectType)}
                           </strong>
                           <span>Status: {formatValue(consult.status)}</span>
+                           {consultPlanLabel(consult.request?.budgetRange) && (
+                             <strong>Payment plan interest: {consultPlanLabel(consult.request?.budgetRange)} (not enrolled)</strong>
+                           )}
                           <span>
                             Idea:{" "}
                             {consult.request?.tattooIdea || "Not provided"}
