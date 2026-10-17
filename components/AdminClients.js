@@ -607,7 +607,7 @@ function AdminClients({ initialClientUid = "" }) {
                   key={client.key}
                   type="button"
                   className={
-                    selectedClientKey === client.key
+                    selectedClient?.key === client.key
                       ? "application-card application-card-active"
                       : "application-card"
                   }
