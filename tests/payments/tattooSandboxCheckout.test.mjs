@@ -12,6 +12,12 @@ const env = {
   NEXT_PUBLIC_FIREBASE_API_KEY: "test-key",
   SQUARE_TATTOO_SANDBOX_ACCESS_TOKEN: "sandbox-token",
   SQUARE_TATTOO_SANDBOX_LOCATION_ID: "location-1",
+  SQUARE_TATTOO_SANDBOX_WEBHOOKS_ENABLED: "true",
+  SQUARE_TATTOO_SANDBOX_NOTIFICATION_URL: "https://preview.example.invalid/api/payments/webhooks/tattoo-sandbox",
+  SQUARE_TATTOO_SANDBOX_SIGNATURE_KEY: "test-signature-key",
+  SQUARE_TATTOO_SANDBOX_JOURNAL_PROJECT_ID: "fawcett-website-sandbox",
+  SQUARE_TATTOO_SANDBOX_JOURNAL_CLIENT_EMAIL: "svc@fawcett-website-sandbox.iam.gserviceaccount.com",
+  SQUARE_TATTOO_SANDBOX_JOURNAL_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----fake-----END PRIVATE KEY-----",
 };
 const input = {
   amountCents: 25000, purpose: "tattoo_deposit",
@@ -21,6 +27,11 @@ const request = (data, token = "a".repeat(40)) => new Request("https://preview.e
   method: "POST", headers: { authorization: "Bearer " + token, "content-type": "application/json" }, body: JSON.stringify(data),
 });
 const response = (status, data) => new Response(JSON.stringify(data), { status });
+const getStore = () => ({
+  now: () => Date.parse("2026-10-17T20:00:00Z"),
+  read: async () => null,
+  commitCreates: async rows => { assert.equal(rows.length, 2); },
+});
 test("production and unconfigured deployments always remain disabled", () => {
   assert.equal(tattooSquareSandboxEnabled({ ...env, VERCEL_ENV: "production" }), false);
   assert.equal(tattooSquareSandboxEnabled({ ...env, SQUARE_TATTOO_ENVIRONMENT: "production" }), false);
@@ -66,7 +77,7 @@ test("checks Auth identity and active admin document before creating a Sandbox l
     }
     throw Error("Unexpected " + url);
   };
-  const res = await handleTattooSquareSandbox(request(input), { env, fetcher });
+  const res = await handleTattooSquareSandbox(request(input), { env, fetcher, getStore });
   assert.equal(res.status, 200);
   assert.deepEqual(urls.length, 3);
   const data = await res.json();
@@ -79,7 +90,7 @@ test("denies inactive admin and wrong Square URL", async () => {
     ? response(200, { users: [{ localId: "user" }] })
     : response(200, { fields: { active: { booleanValue: false } } }) });
   assert.equal(denied.status, 403);
-  const wrong = await handleTattooSquareSandbox(request(input), { env, fetcher: async url => url.includes("accounts:lookup")
+  const wrong = await handleTattooSquareSandbox(request(input), { env, getStore, fetcher: async url => url.includes("accounts:lookup")
     ? response(200, { users: [{ localId: "admin" }] })
     : url.includes("adminUsers") ? response(200, { fields: { active: { booleanValue: true } } })
     : response(200, { payment_link: { id: "link", url: "https://evil.invalid/pay" } }) });
