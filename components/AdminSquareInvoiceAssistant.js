@@ -50,7 +50,13 @@ export default function AdminSquareInvoiceAssistant({
         cache: "no-store",
       });
       const result = await res.json();
-      if (!res.ok) throw Error("Sandbox link unavailable (" + (result.error || res.status) + ").");
+      if (!res.ok) {
+        const diagnostic = result?.diagnostic;
+        const safeDetail = diagnostic?.stage && diagnostic?.reason
+          ? " · " + diagnostic.stage + " / " + diagnostic.reason
+          : "";
+        throw Error("Sandbox link unavailable (" + (result.error || res.status) + safeDetail + ").");
+      }
       setSandboxResult(result);
     } catch (error) {
       setSandboxError(error.message + " If uncertain, retry with the same details; the request ID remains unchanged.");
@@ -140,7 +146,7 @@ export default function AdminSquareInvoiceAssistant({
           <p className="mt-2 text-sm text-white/70">
             Developer test only: no real charges, no client invitation, no Studio Credit and no recurring billing.
             After checking client, purpose, final amount and GST treatment, create a simulated Square checkout link.
-            No payment records are posted to Firebase.
+            Test order records are written only to the separate Firebase Sandbox journal; no live payments or Studio Credit are posted.
           </p>
           {sandboxError && <p role="alert" className="mt-2 text-sm text-[#ffb5b5]">{sandboxError}</p>}
           {sandboxResult ? (
