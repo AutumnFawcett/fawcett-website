@@ -96,3 +96,60 @@ test("denies inactive admin and wrong Square URL", async () => {
     : response(200, { payment_link: { id: "link", url: "https://evil.invalid/pay" } }) });
   assert.equal(wrong.status, 502);
 });
+
+test("Sandbox diagnostics identify journal read failures without disclosing credentials", async () => {
+  const fetcher = async url => url.includes("accounts:lookup")
+    ? response(200, { users: [{ localId: "admin-123" }] })
+    : response(200, { fields: { active: { booleanValue: true } } });
+  const res = await handleTattooSquareSandbox(request(input), {
+    env: { ...env, SQUARE_TATTOO_SANDBOX_ACCESS_TOKEN: "very-secret-token" },
+    fetcher,
+    getStore: () => ({ read: async () => { throw Error("sandbox_firestore_read_failed"); } }),
+  });
+  assert.equal(res.status, 503);
+  const payload = await res.json();
+  assert.deepEqual(payload.diagnostic, {
+    stage: "sandbox_journal_read", reason: "sandbox_firestore_read_failed",
+  });
+  assert.equal(JSON.stringify(payload).includes("very-secret-token"), false);
+});
+
+test("unexpected Sandbox errors report only the failed stage, never the raw exception", async () => {
+  const fetcher = async url => url.includes("accounts:lookup")
+    ? response(200, { users: [{ localId: "admin-123" }] })
+    : response(200, { fields: { active: { booleanValue: true } } });
+  const res = await handleTattooSquareSandbox(request(input), {
+    env, fetcher,
+    getStore: () => ({ read: async () => { throw Error("sensitive-internal-path"); } }),
+  });
+  assert.equal(res.status, 503);
+  const payload = await res.json();
+  assert.equal(payload.diagnostic.stage, "sandbox_journal_read");
+  assert.equal(payload.diagnostic.reason, "unexpected_failure");
+  assert.equal(JSON.stringify(payload).includes("sensitive-internal-path"), false);
+});
+
+test("Sandbox diagnostics distinguish an order journal commit failure", async () => {
+  const fetcher = async url => {
+    if (url.includes("accounts:lookup")) return response(200, { users: [{ localId: "admin-123" }] });
+    if (url.includes("adminUsers")) return response(200, { fields: { active: { booleanValue: true } } });
+    if (url.includes("connect.squareupsandbox.com")) {
+      return response(200, { payment_link: {
+        id: "link-1", order_id: "order-1", url: "https://square.link/u/EXAMPLE",
+      } });
+    }
+    throw Error("Unexpected request");
+  };
+  const res = await handleTattooSquareSandbox(request(input), {
+    env, fetcher,
+    getStore: () => ({
+      now: () => Date.parse("2026-10-17T20:00:00Z"),
+      read: async () => null,
+      commitCreates: async () => { throw Error("sandbox_firestore_commit_failed"); },
+    }),
+  });
+  assert.equal(res.status, 503);
+  assert.deepEqual((await res.json()).diagnostic, {
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed",
+  });
+});
