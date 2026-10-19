@@ -145,11 +145,15 @@ test("Sandbox diagnostics distinguish an order journal commit failure", async ()
     getStore: () => ({
       now: () => Date.parse("2026-10-17T20:00:00Z"),
       read: async () => null,
-      commitCreates: async () => { throw Error("sandbox_firestore_commit_failed"); },
+      commitCreates: async () => {
+        const error = Error("sandbox_firestore_commit_failed");
+        error.httpStatus = 403;
+        throw error;
+      },
     }),
   });
   assert.equal(res.status, 503);
   assert.deepEqual((await res.json()).diagnostic, {
-    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed",
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
   });
 });
