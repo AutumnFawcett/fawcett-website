@@ -53,7 +53,9 @@ export default function AdminSquareInvoiceAssistant({
       if (!res.ok) {
         const diagnostic = result?.diagnostic;
         const safeDetail = diagnostic?.stage && diagnostic?.reason
-          ? " · " + diagnostic.stage + " / " + diagnostic.reason + (diagnostic.httpStatus ? " / HTTP " + diagnostic.httpStatus : "")
+          ? " · " + diagnostic.stage + " / " + diagnostic.reason
+            + (diagnostic.httpStatus ? " / HTTP " + diagnostic.httpStatus : "")
+            + (diagnostic.missingPermission ? " / missing " + diagnostic.missingPermission : "")
           : "";
         throw Error("Sandbox link unavailable (" + (result.error || res.status) + safeDetail + ").");
       }
