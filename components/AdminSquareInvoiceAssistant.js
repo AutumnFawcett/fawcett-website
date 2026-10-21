@@ -16,6 +16,9 @@ export default function AdminSquareInvoiceAssistant({
   const [busy, setBusy] = useState(false);
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxBusy, setSandboxBusy] = useState(false);
+  const [journalBusy, setJournalBusy] = useState(false);
+  const [journalReady, setJournalReady] = useState(false);
+  const [journalResult, setJournalResult] = useState("");
   const [sandboxError, setSandboxError] = useState("");
   const [sandboxResult, setSandboxResult] = useState(null);
   const sandboxRequestId = useRef(null);
@@ -28,6 +31,43 @@ export default function AdminSquareInvoiceAssistant({
       .catch(() => { if (active) setSandboxEnabled(false); });
     return () => { active = false; };
   }, []);
+
+  // One authenticated, two-document Sandbox Firestore commit with no Square
+  // API request, payment link or client data. Safe to retry with the same ID.
+  async function checkSandboxJournal() {
+    setJournalResult("");
+    setJournalBusy(true);
+    try {
+      const { auth } = getFirebaseClient();
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw Error("Sign in again.");
+      const res = await fetch("/api/admin/tattoo-checkout", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ journalPreflight: true }),
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const diagnostic = data?.diagnostic;
+        const detail = diagnostic
+          ? [diagnostic.stage, diagnostic.reason,
+            diagnostic.httpStatus ? "HTTP " + diagnostic.httpStatus : "",
+            diagnostic.missingPermission ? "missing " + diagnostic.missingPermission : "",
+            diagnostic.googleReason || ""].filter(Boolean).join(" / ")
+          : data?.error || "unknown_error";
+        throw Error(detail);
+      }
+      if (data.sandboxJournalWritable !== true || data.squareCalled !== false) throw Error("unexpected_preflight_response");
+      setJournalReady(true);
+      setJournalResult("Sandbox journal write passed. No Square link or payment was created.");
+    } catch (error) {
+      setJournalReady(false);
+      setJournalResult("Sandbox journal check failed: " + error.message);
+    } finally {
+      setJournalBusy(false);
+    }
+  }
 
   async function createSandboxLink() {
     setSandboxError("");
@@ -50,7 +90,16 @@ export default function AdminSquareInvoiceAssistant({
         cache: "no-store",
       });
       const result = await res.json();
-      if (!res.ok) throw Error("Sandbox link unavailable (" + (result.error || res.status) + ").");
+      if (!res.ok) {
+        const diagnostic = result?.diagnostic;
+        const safeDetail = diagnostic?.stage && diagnostic?.reason
+          ? " · " + diagnostic.stage + " / " + diagnostic.reason
+            + (diagnostic.httpStatus ? " / HTTP " + diagnostic.httpStatus : "")
+            + (diagnostic.missingPermission ? " / missing " + diagnostic.missingPermission : "")
+            + (diagnostic.googleReason ? " / " + diagnostic.googleReason : "")
+          : "";
+        throw Error("Sandbox link unavailable (" + (result.error || res.status) + safeDetail + ").");
+      }
       setSandboxResult(result);
     } catch (error) {
       setSandboxError(error.message + " If uncertain, retry with the same details; the request ID remains unchanged.");
@@ -140,8 +189,18 @@ export default function AdminSquareInvoiceAssistant({
           <p className="mt-2 text-sm text-white/70">
             Developer test only: no real charges, no client invitation, no Studio Credit and no recurring billing.
             After checking client, purpose, final amount and GST treatment, create a simulated Square checkout link.
-            No payment records are posted to Firebase.
+            Test order records are written only to the separate Firebase Sandbox journal; no live payments or Studio Credit are posted.
           </p>
+          <div className="mt-3">
+            <button type="button" className="button button-secondary" onClick={checkSandboxJournal}
+              disabled={journalBusy || sandboxBusy}>
+              {journalBusy ? "Testing Firebase Sandbox journal…" : "Check Sandbox journal (no Square request)"}
+            </button>
+            {journalResult && <p className="mt-2 text-sm" role="status">{journalResult}</p>}
+            {!journalReady && <p className="mt-2 text-xs text-white/70">
+              Check the journal first; this prevents creating more Square test links while Firebase writes are failing.
+            </p>}
+          </div>
           {sandboxError && <p role="alert" className="mt-2 text-sm text-[#ffb5b5]">{sandboxError}</p>}
           {sandboxResult ? (
             <div className="mt-3 text-sm">
@@ -154,14 +213,14 @@ export default function AdminSquareInvoiceAssistant({
               }}>Start another test</button>
             </div>
           ) : (
-            <button className="button button-secondary mt-3" type="button" disabled={sandboxBusy}
+            <button className="button button-secondary mt-3" type="button" disabled={sandboxBusy || journalBusy || !journalReady}
               onClick={createSandboxLink}>{sandboxBusy ? "Creating test link…" : "Create Sandbox payment link"}</button>
           )}
         </div>
       )}
       <div className="mt-5 border-t border-white/15 pt-4 text-sm leading-6 text-white/75">
         <strong>To collect payment now:</strong> In Square Dashboard, go to Invoices, create a one-time invoice,
-        review the client's email, price, approved terms and applicable tax, then send it through Square.
+        review the client&apos;s email, price, approved terms and applicable tax, then send it through Square.
         Alternatively, create a Square Payment Link and share it privately with the client.
         After Square confirms payment, reconcile it in the manual payment records below using the receipt or transaction reference.
         <strong> Do not mark an unpaid invoice as paid or grant Studio Credit from the invoice request alone.</strong>

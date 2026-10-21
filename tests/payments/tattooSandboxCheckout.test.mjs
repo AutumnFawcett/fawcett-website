@@ -96,3 +96,131 @@ test("denies inactive admin and wrong Square URL", async () => {
     : response(200, { payment_link: { id: "link", url: "https://evil.invalid/pay" } }) });
   assert.equal(wrong.status, 502);
 });
+
+test("Sandbox diagnostics identify journal read failures without disclosing credentials", async () => {
+  const fetcher = async url => url.includes("accounts:lookup")
+    ? response(200, { users: [{ localId: "admin-123" }] })
+    : response(200, { fields: { active: { booleanValue: true } } });
+  const res = await handleTattooSquareSandbox(request(input), {
+    env: { ...env, SQUARE_TATTOO_SANDBOX_ACCESS_TOKEN: "very-secret-token" },
+    fetcher,
+    getStore: () => ({ read: async () => { throw Error("sandbox_firestore_read_failed"); } }),
+  });
+  assert.equal(res.status, 503);
+  const payload = await res.json();
+  assert.deepEqual(payload.diagnostic, {
+    stage: "sandbox_journal_read", reason: "sandbox_firestore_read_failed",
+  });
+  assert.equal(JSON.stringify(payload).includes("very-secret-token"), false);
+});
+
+test("unexpected Sandbox errors report only the failed stage, never the raw exception", async () => {
+  const fetcher = async url => url.includes("accounts:lookup")
+    ? response(200, { users: [{ localId: "admin-123" }] })
+    : response(200, { fields: { active: { booleanValue: true } } });
+  const res = await handleTattooSquareSandbox(request(input), {
+    env, fetcher,
+    getStore: () => ({ read: async () => { throw Error("sensitive-internal-path"); } }),
+  });
+  assert.equal(res.status, 503);
+  const payload = await res.json();
+  assert.equal(payload.diagnostic.stage, "sandbox_journal_read");
+  assert.equal(payload.diagnostic.reason, "unexpected_failure");
+  assert.equal(JSON.stringify(payload).includes("sensitive-internal-path"), false);
+});
+
+test("Sandbox diagnostics distinguish an order journal commit failure", async () => {
+  const logs = [];
+  let squareCalls = 0;
+  const fetcher = async (url, options) => {
+    if (url.includes("accounts:lookup")) return response(200, { users: [{ localId: "admin-123" }] });
+    if (url.includes("adminUsers")) return response(200, { fields: { active: { booleanValue: true } } });
+    if (url.includes("connect.squareupsandbox.com")) {
+      squareCalls += 1;
+      assert.equal(JSON.parse(options.body).idempotency_key, "fawcett-tattoo-sandbox-" + input.idempotencyKey);
+      return response(200, { payment_link: {
+        id: "link-1", order_id: "order-1", url: "https://square.link/u/EXAMPLE",
+      } });
+    }
+    throw Error("Unexpected request");
+  };
+  const res = await handleTattooSquareSandbox(request(input), {
+    env, fetcher, diagnosticLogger: line => logs.push(JSON.parse(line)),
+    getStore: () => ({
+      now: () => Date.parse("2026-10-17T20:00:00Z"),
+      read: async () => null,
+      commitCreates: async () => {
+        const error = Error("sandbox_firestore_commit_failed");
+        error.httpStatus = 403;
+        throw error;
+      },
+    }),
+  });
+  assert.equal(res.status, 503);
+  assert.deepEqual((await res.json()).diagnostic, {
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
+  });
+  assert.deepEqual(logs, [{ event: "tattoo_sandbox_checkout_failure",
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
+  }]);
+  assert.equal(squareCalls, 1);
+  assert.equal(JSON.stringify(logs).includes(input.idempotencyKey), false);
+});
+
+test("admin-only Sandbox journal preflight writes two harmless records without Square API calls", async () => {
+  let squareCalls = 0;
+  const rowsRecorded = [];
+  const fetcher = async url => {
+    if (String(url).includes("accounts:lookup")) return response(200, { users: [{ localId: "admin-123" }] });
+    if (String(url).includes("adminUsers")) return response(200, { fields: { active: { booleanValue: true } } });
+    squareCalls += 1;
+    throw Error("Preflight must never contact Square");
+  };
+  const store = {
+    read: async () => null,
+    commitCreates: async rows => { rowsRecorded.push(...rows); },
+  };
+  const req = request({ journalPreflight: true });
+  const res = await handleTattooSquareSandbox(req, { env, fetcher, getStore: () => store });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), {
+    sandboxJournalWritable: true, squareCalled: false, studioCreditIssued: false,
+  });
+  assert.equal(squareCalls, 0);
+  assert.equal(rowsRecorded.length, 2);
+  assert.equal(rowsRecorded.every(row => row.collection === "tattooSandboxDiagnostics"), true);
+  assert.equal(rowsRecorded.every(row => !JSON.stringify(row.data).includes("payment")), true);
+});
+test("journal preflight blocks disabled deployments, non-admins, and unauthorized writes", async () => {
+  const preflight = { journalPreflight: true };
+  const production = await handleTattooSquareSandbox(request(preflight), {
+    env: { ...env, VERCEL_ENV: "production" }, fetcher: () => { throw Error("unexpected"); },
+  });
+  assert.equal(production.status, 503);
+  const noAdmin = await handleTattooSquareSandbox(request(preflight, ""), { env });
+  assert.equal(noAdmin.status, 401);
+  const fetcher = async url => String(url).includes("accounts:lookup")
+    ? response(200, { users: [{ localId: "admin-123" }] })
+    : response(200, { fields: { active: { booleanValue: true } } });
+  const logs = [];
+  const denied = await handleTattooSquareSandbox(request(preflight), {
+    env, fetcher, diagnosticLogger: line => logs.push(JSON.parse(line)), getStore: () => ({
+      read: async () => null,
+      commitCreates: async () => {
+        const error = Error("sandbox_firestore_commit_failed");
+        error.httpStatus = 403;
+        error.googleReason = "IAM_PERMISSION_DENIED";
+        throw error;
+      },
+    }),
+  });
+  assert.equal(denied.status, 503);
+  assert.deepEqual((await denied.json()).diagnostic, {
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed",
+    httpStatus: 403, googleReason: "IAM_PERMISSION_DENIED",
+  });
+  assert.deepEqual(logs, [{ event: "tattoo_sandbox_checkout_failure",
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed",
+    httpStatus: 403, googleReason: "IAM_PERMISSION_DENIED",
+  }]);
+});

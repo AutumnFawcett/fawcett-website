@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHmac, generateKeyPairSync } from "node:crypto";
 import {
   sandboxJournalEnabled, verifyTattooSquareSignature, parseTattooSquareEvent,
   journalId, classifyTattooEvent,
 } from "../../lib/payments/tattooSandboxWebhook.mjs";
-import { recordSandboxCheckout, journalVerifiedTattooEvent } from "../../lib/payments/tattooSandboxStore.mjs";
+import { reportTattooSandboxFailure } from "../../lib/payments/tattooSandboxDiagnostics.mjs";
+import { makeTattooSandboxStore, recordSandboxCheckout, journalVerifiedTattooEvent } from "../../lib/payments/tattooSandboxStore.mjs";
 import { handleTattooSandboxWebhook } from "../../lib/payments/tattooSandboxWebhookHandler.mjs";
 
 const endpoint = "https://fawcett-test-branch.vercel.app/api/payments/webhooks/tattoo-sandbox";
@@ -145,4 +146,51 @@ test("journal unavailable returns retryable response without falsely confirming 
   assert.equal((await failed.json()).outcome,"sandbox_journal_unavailable");
   const disabled=await handleTattooSandboxWebhook(request(raw),{env:{...env,VERCEL_ENV:"production"}});
   assert.equal(disabled.status,503);
+});
+
+test("Firestore 403 diagnostic exposes only an allowlisted permission identifier", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const testEnv = { ...env, SQUARE_TATTOO_SANDBOX_JOURNAL_PRIVATE_KEY:
+    privateKey.export({ type: "pkcs8", format: "pem" }) };
+  const getStore = responseBody => makeTattooSandboxStore({
+    env: testEnv,
+    now: () => Date.parse("2026-10-20T20:00:00Z"),
+    fetcher: async url => {
+      if (String(url).includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "synthetic-token", expires_in: 3600 }), { status: 200 });
+      }
+      return new Response(JSON.stringify(responseBody), { status: 403 });
+    },
+  });
+  const attempt = store => store.commitCreates([{
+    collection: "tattooSandboxOrders",
+    id: journalId("checkout", idempotencyKey),
+    data: { status: "test", providerConfirmed: false },
+  }]);
+  await assert.rejects(attempt(getStore({error: {
+    message: "Permission 'datastore.entities.create' denied on resource",
+    details: [{ reason: "IAM_PERMISSION_DENIED", metadata: { permission: "datastore.entities.create", resource: "synthetic-private-resource", email: "private@example.invalid" } }],
+  }})), error => {
+    assert.equal(error.message, "sandbox_firestore_commit_failed");
+    assert.equal(error.httpStatus, 403);
+    assert.equal(error.missingPermission, "datastore.entities.create");
+    assert.equal(error.googleReason, "IAM_PERMISSION_DENIED");
+    const logs = [];
+    reportTattooSandboxFailure("sandbox_journal_write", error, { env, logger: line => logs.push(JSON.parse(line)) });
+    assert.deepEqual(logs, [{ event: "tattoo_sandbox_checkout_failure",
+      stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
+      missingPermission: "datastore.entities.create", googleReason: "IAM_PERMISSION_DENIED",
+    }]);
+    return true;
+  });
+  await assert.rejects(attempt(getStore({error: {
+    message: "private service credential and client email should never be echoed",
+    details: [{reason: "secret-reason", metadata: {permission: "secrets.admin"}}],
+  }})), error => {
+    assert.equal(error.httpStatus, 403);
+    assert.equal(error.missingPermission, null);
+    assert.equal(error.googleReason, null);
+    assert.equal(JSON.stringify(error).includes("service credential"), false);
+    return true;
+  });
 });
