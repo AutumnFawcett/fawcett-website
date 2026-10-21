@@ -5,6 +5,7 @@ import {
   sandboxJournalEnabled, verifyTattooSquareSignature, parseTattooSquareEvent,
   journalId, classifyTattooEvent,
 } from "../../lib/payments/tattooSandboxWebhook.mjs";
+import { reportTattooSandboxFailure } from "../../lib/payments/tattooSandboxDiagnostics.mjs";
 import { makeTattooSandboxStore, recordSandboxCheckout, journalVerifiedTattooEvent } from "../../lib/payments/tattooSandboxStore.mjs";
 import { handleTattooSandboxWebhook } from "../../lib/payments/tattooSandboxWebhookHandler.mjs";
 
@@ -168,19 +169,27 @@ test("Firestore 403 diagnostic exposes only an allowlisted permission identifier
   }]);
   await assert.rejects(attempt(getStore({error: {
     message: "Permission 'datastore.entities.create' denied on resource",
-    details: [{ metadata: { permission: "datastore.entities.create" } }],
+    details: [{ reason: "IAM_PERMISSION_DENIED", metadata: { permission: "datastore.entities.create", resource: "synthetic-private-resource", email: "private@example.invalid" } }],
   }})), error => {
     assert.equal(error.message, "sandbox_firestore_commit_failed");
     assert.equal(error.httpStatus, 403);
     assert.equal(error.missingPermission, "datastore.entities.create");
+    assert.equal(error.googleReason, "IAM_PERMISSION_DENIED");
+    const logs = [];
+    reportTattooSandboxFailure("sandbox_journal_write", error, { env, logger: line => logs.push(JSON.parse(line)) });
+    assert.deepEqual(logs, [{ event: "tattoo_sandbox_checkout_failure",
+      stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
+      missingPermission: "datastore.entities.create", googleReason: "IAM_PERMISSION_DENIED",
+    }]);
     return true;
   });
   await assert.rejects(attempt(getStore({error: {
     message: "private service credential and client email should never be echoed",
-    details: [{metadata: {permission: "secrets.admin"}}],
+    details: [{reason: "secret-reason", metadata: {permission: "secrets.admin"}}],
   }})), error => {
     assert.equal(error.httpStatus, 403);
     assert.equal(error.missingPermission, null);
+    assert.equal(error.googleReason, null);
     assert.equal(JSON.stringify(error).includes("service credential"), false);
     return true;
   });

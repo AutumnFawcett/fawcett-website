@@ -130,10 +130,14 @@ test("unexpected Sandbox errors report only the failed stage, never the raw exce
 });
 
 test("Sandbox diagnostics distinguish an order journal commit failure", async () => {
-  const fetcher = async url => {
+  const logs = [];
+  let squareCalls = 0;
+  const fetcher = async (url, options) => {
     if (url.includes("accounts:lookup")) return response(200, { users: [{ localId: "admin-123" }] });
     if (url.includes("adminUsers")) return response(200, { fields: { active: { booleanValue: true } } });
     if (url.includes("connect.squareupsandbox.com")) {
+      squareCalls += 1;
+      assert.equal(JSON.parse(options.body).idempotency_key, "fawcett-tattoo-sandbox-" + input.idempotencyKey);
       return response(200, { payment_link: {
         id: "link-1", order_id: "order-1", url: "https://square.link/u/EXAMPLE",
       } });
@@ -141,7 +145,7 @@ test("Sandbox diagnostics distinguish an order journal commit failure", async ()
     throw Error("Unexpected request");
   };
   const res = await handleTattooSquareSandbox(request(input), {
-    env, fetcher,
+    env, fetcher, diagnosticLogger: line => logs.push(JSON.parse(line)),
     getStore: () => ({
       now: () => Date.parse("2026-10-17T20:00:00Z"),
       read: async () => null,
@@ -156,6 +160,11 @@ test("Sandbox diagnostics distinguish an order journal commit failure", async ()
   assert.deepEqual((await res.json()).diagnostic, {
     stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
   });
+  assert.deepEqual(logs, [{ event: "tattoo_sandbox_checkout_failure",
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
+  }]);
+  assert.equal(squareCalls, 1);
+  assert.equal(JSON.stringify(logs).includes(input.idempotencyKey), false);
 });
 
 test("admin-only Sandbox journal preflight writes two harmless records without Square API calls", async () => {
@@ -193,8 +202,9 @@ test("journal preflight blocks disabled deployments, non-admins, and unauthorize
   const fetcher = async url => String(url).includes("accounts:lookup")
     ? response(200, { users: [{ localId: "admin-123" }] })
     : response(200, { fields: { active: { booleanValue: true } } });
+  const logs = [];
   const denied = await handleTattooSquareSandbox(request(preflight), {
-    env, fetcher, getStore: () => ({
+    env, fetcher, diagnosticLogger: line => logs.push(JSON.parse(line)), getStore: () => ({
       read: async () => null,
       commitCreates: async () => {
         const error = Error("sandbox_firestore_commit_failed");
@@ -209,4 +219,8 @@ test("journal preflight blocks disabled deployments, non-admins, and unauthorize
     stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed",
     httpStatus: 403, googleReason: "IAM_PERMISSION_DENIED",
   });
+  assert.deepEqual(logs, [{ event: "tattoo_sandbox_checkout_failure",
+    stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed",
+    httpStatus: 403, googleReason: "IAM_PERMISSION_DENIED",
+  }]);
 });

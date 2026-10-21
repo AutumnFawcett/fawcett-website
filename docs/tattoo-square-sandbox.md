@@ -49,3 +49,42 @@ The existing Preview's `NEXT_PUBLIC_FIREBASE_PROJECT_ID` **must** remain `fawcet
 
 ## Future go-live gate
 Live billing needs a separate code and approval process covering trusted production order/client identity, idempotent charge/refund/dispute handling, provider-readback and reconciliation, taxes and terms, manual exception handling, and an owner-approved activation flag. Recurring plans and dollar-for-dollar Studio Credit remain separate later releases.
+
+## Preview-only failure logging (PR #59)
+
+Firestore commit failures already capture HTTP status plus optional allowlisted
+`googleReason` (from `error.details[].reason`) and `missingPermission` (from
+`error.details[].metadata.permission` or a recognized permission token in the
+Google message). Those optional fields are returned to the admin. They are absent
+when Google provides no recognized details; HTTP 403 alone does not identify a
+specific permission or policy. The checkout error display now includes
+`googleReason`, matching the journal-preflight display.
+
+The failure handler emits one JSON warning in **Vercel Preview only**, labelled
+`tattoo_sandbox_checkout_failure`. The response and log use the same revalidated,
+allowlisted diagnostic. Only static stage/reason values, an integer HTTP error
+status, and recognized Google reason/permission constants can be emitted. Raw
+errors, stacks, response bodies, credentials, headers, tokens, account identities,
+project/document paths, Square IDs, checkout URLs, amounts and idempotency keys
+are never included. Logging failure does not change the controlled response or
+retry provider requests. There is no new flag or configuration requirement, and
+Production remains hard-disabled.
+
+Fictional generic failure (not an assertion of the live cause):
+
+```json
+{"event":"tattoo_sandbox_checkout_failure","stage":"sandbox_journal_write","reason":"sandbox_firestore_commit_failed","httpStatus":403}
+```
+
+**Next diagnostic step:** after code review and the existing PR Preview becoming
+Ready, inspect Preview runtime logs for this event on
+`/api/admin/tattoo-checkout`. Logging cannot recover an earlier exception
+retroactively. If a new diagnostic is needed, the owner must separately authorize
+the existing journal-only preflight: it can create two diagnostic documents but
+never calls Square. Do not run checkout, change settings, or regenerate the
+original idempotency key for this investigation. If the preflight documents
+already exist, its successful read does not exercise the failed commit path.
+Share only the allowlisted diagnostic fields. If no recognized Google details
+are present, retain the generic 403 result rather than guessing an IAM change;
+a separately approved owner-side read-only policy/permission investigation is
+then needed.

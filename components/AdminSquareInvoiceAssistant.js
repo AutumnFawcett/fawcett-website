@@ -96,6 +96,7 @@ export default function AdminSquareInvoiceAssistant({
           ? " · " + diagnostic.stage + " / " + diagnostic.reason
             + (diagnostic.httpStatus ? " / HTTP " + diagnostic.httpStatus : "")
             + (diagnostic.missingPermission ? " / missing " + diagnostic.missingPermission : "")
+            + (diagnostic.googleReason ? " / " + diagnostic.googleReason : "")
           : "";
         throw Error("Sandbox link unavailable (" + (result.error || res.status) + safeDetail + ").");
       }
@@ -219,7 +220,7 @@ export default function AdminSquareInvoiceAssistant({
       )}
       <div className="mt-5 border-t border-white/15 pt-4 text-sm leading-6 text-white/75">
         <strong>To collect payment now:</strong> In Square Dashboard, go to Invoices, create a one-time invoice,
-        review the client's email, price, approved terms and applicable tax, then send it through Square.
+        review the client&apos;s email, price, approved terms and applicable tax, then send it through Square.
         Alternatively, create a Square Payment Link and share it privately with the client.
         After Square confirms payment, reconcile it in the manual payment records below using the receipt or transaction reference.
         <strong> Do not mark an unpaid invoice as paid or grant Studio Credit from the invoice request alone.</strong>
