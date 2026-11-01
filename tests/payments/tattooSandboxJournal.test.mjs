@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHmac, generateKeyPairSync } from "node:crypto";
 import {
-  sandboxJournalEnabled, verifyTattooSquareSignature, parseTattooSquareEvent,
+  WEBHOOK_MAX_BYTES, sandboxJournalEnabled, verifyTattooSquareSignature, parseTattooSquareEvent,
   journalId, classifyTattooEvent,
 } from "../../lib/payments/tattooSandboxWebhook.mjs";
-import { recordSandboxCheckout, journalVerifiedTattooEvent } from "../../lib/payments/tattooSandboxStore.mjs";
-import { handleTattooSandboxWebhook } from "../../lib/payments/tattooSandboxWebhookHandler.mjs";
+import { reportTattooSandboxFailure } from "../../lib/payments/tattooSandboxDiagnostics.mjs";
+import { makeTattooSandboxStore, recordSandboxCheckout, journalVerifiedTattooEvent as realJournal } from "../../lib/payments/tattooSandboxStore.mjs";
+import { handleTattooSandboxWebhook as realHandler } from "../../lib/payments/tattooSandboxWebhookHandler.mjs";
 
 const endpoint = "https://fawcett-test-branch.vercel.app/api/payments/webhooks/tattoo-sandbox";
 const env = {
@@ -38,13 +39,19 @@ const fakeStore = () => {
   };
 };
 const event = (type, payload, eventId) => ({
-  merchant_id: "test-merchant", environment: "sandbox", event_id: eventId, type,
-  data: { object: payload },
+  merchant_id: "test-merchant", event_id: eventId, type,
+  created_at: "2026-10-17T20:00:00.000Z",
+  ...(type.startsWith("dispute.") ? { location_id: "square-sandbox-loc" } : {}),
+  data: { type: Object.keys(payload)[0], id: Object.values(payload)[0].id, object: payload },
 });
 const charge = event("payment.updated", {
-  payment: { id: "payment-123", status: "COMPLETED", location_id: "square-sandbox-loc",
+  payment: { id: "payment-123", status: "COMPLETED", source_type: "CARD",
+    card_details: { status: "CAPTURED", card: { card_brand: "VISA", card_type: "CREDIT", last_4: "1111" } }, location_id: "square-sandbox-loc",
     order_id: "order_abc", amount_money: { amount: 25000, currency: "CAD" } },
 }, "event-charge-123");
+const mockPaymentFetch = async () => new Response(JSON.stringify({ payment: charge.data.object.payment }), { status: 200 });
+const handleTattooSandboxWebhook = (req, options = {}) => realHandler(req, { fetcher: mockPaymentFetch, ...options });
+const journalVerifiedTattooEvent = options => realJournal({ readPayment: async () => structuredClone(charge.data.object.payment), ...options });
 const signature = raw => createHmac("sha256",env.SQUARE_TATTOO_SANDBOX_SIGNATURE_KEY)
   .update(endpoint + raw, "utf8").digest("base64");
 const request = (raw, sig=signature(raw), url=endpoint) => new Request(url, {
@@ -145,4 +152,395 @@ test("journal unavailable returns retryable response without falsely confirming 
   assert.equal((await failed.json()).outcome,"sandbox_journal_unavailable");
   const disabled=await handleTattooSandboxWebhook(request(raw),{env:{...env,VERCEL_ENV:"production"}});
   assert.equal(disabled.status,503);
+});
+
+test("Firestore 403 diagnostic exposes only an allowlisted permission identifier", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const testEnv = { ...env, SQUARE_TATTOO_SANDBOX_JOURNAL_PRIVATE_KEY:
+    privateKey.export({ type: "pkcs8", format: "pem" }) };
+  const getStore = responseBody => makeTattooSandboxStore({
+    env: testEnv,
+    now: () => Date.parse("2026-10-20T20:00:00Z"),
+    fetcher: async url => {
+      if (String(url).includes("oauth2.googleapis.com/token")) {
+        return new Response(JSON.stringify({ access_token: "synthetic-token", expires_in: 3600 }), { status: 200 });
+      }
+      return new Response(JSON.stringify(responseBody), { status: 403 });
+    },
+  });
+  const attempt = store => store.commitCreates([{
+    collection: "tattooSandboxOrders",
+    id: journalId("checkout", idempotencyKey),
+    data: { status: "test", providerConfirmed: false },
+  }]);
+  await assert.rejects(attempt(getStore({error: {
+    message: "Permission 'datastore.entities.create' denied on resource",
+    details: [{ reason: "IAM_PERMISSION_DENIED", metadata: { permission: "datastore.entities.create", resource: "synthetic-private-resource", email: "private@example.invalid" } }],
+  }})), error => {
+    assert.equal(error.message, "sandbox_firestore_commit_failed");
+    assert.equal(error.httpStatus, 403);
+    assert.equal(error.missingPermission, "datastore.entities.create");
+    assert.equal(error.googleReason, "IAM_PERMISSION_DENIED");
+    const logs = [];
+    reportTattooSandboxFailure("sandbox_journal_write", error, { env, logger: line => logs.push(JSON.parse(line)) });
+    assert.deepEqual(logs, [{ event: "tattoo_sandbox_checkout_failure",
+      stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: 403,
+      missingPermission: "datastore.entities.create", googleReason: "IAM_PERMISSION_DENIED",
+    }]);
+    return true;
+  });
+  await assert.rejects(attempt(getStore({error: {
+    message: "private service credential and client email should never be echoed",
+    details: [{reason: "secret-reason", metadata: {permission: "secrets.admin"}}],
+  }})), error => {
+    assert.equal(error.httpStatus, 403);
+    assert.equal(error.missingPermission, null);
+    assert.equal(error.googleReason, null);
+    assert.equal(JSON.stringify(error).includes("service credential"), false);
+    return true;
+  });
+});
+
+test("REST store uses HTTPS transport URLs and resource-only create names in the exact atomic payload", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const calls = [];
+  const root = "projects/fawcett-website-sandbox/databases/(default)/documents";
+  const ids = [journalId("probe", "payload-first"), journalId("probe", "payload-second")];
+  const store = makeTattooSandboxStore({
+    env: { ...env, SQUARE_TATTOO_SANDBOX_JOURNAL_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }) },
+    fetcher: async (url, options) => {
+      calls.push({ url, options });
+      if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "synthetic-token", expires_in: 3600 });
+      if (options.method === "POST") return Response.json({ writeResults: [{}, {}] });
+      return new Response(null, { status: 404 });
+    },
+  });
+  assert.equal(await store.read("tattooSandboxDiagnostics", ids[0]), null);
+  await store.commitCreates(ids.map(id => ({ collection: "tattooSandboxDiagnostics", id,
+    data: { kind: "journal_preflight", version: 1, environment: "sandbox", confirmed: false } })));
+  assert.equal(calls.length, 3);
+  assert.equal(calls[1].url, "https://firestore.googleapis.com/v1/" + root + "/tattooSandboxDiagnostics/" + ids[0]);
+  const commit = calls[2];
+  assert.equal(commit.url, "https://firestore.googleapis.com/v1/" + root + ":commit");
+  assert.equal(commit.options.method, "POST");
+  assert.equal(commit.options.headers.Authorization, "Bearer synthetic-token");
+  assert.equal(commit.options.headers["Content-Type"], "application/json");
+  assert.equal(commit.options.cache, "no-store");
+  assert.deepEqual(JSON.parse(commit.options.body), { writes: ids.map(id => ({
+    update: { name: root + "/tattooSandboxDiagnostics/" + id, fields: {
+      kind: { stringValue: "journal_preflight" }, version: { integerValue: "1" },
+      environment: { stringValue: "sandbox" }, confirmed: { booleanValue: false },
+    } }, currentDocument: { exists: false },
+  })) });
+});
+
+test("REST commit failures never retry, overwrite existing documents, or expose raw Google bodies", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  for (const status of [400, 403, 409, 500]) {
+    let commits = 0;
+    const store = makeTattooSandboxStore({
+      env: { ...env, SQUARE_TATTOO_SANDBOX_JOURNAL_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }) },
+      fetcher: async (url, options) => {
+        if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "synthetic-token", expires_in: 3600 });
+        commits++;
+        assert.deepEqual(JSON.parse(options.body).writes[0].currentDocument, { exists: false });
+        return new Response("SYNTHETIC_PRIVATE_GOOGLE_BODY", { status });
+      },
+    });
+    await assert.rejects(store.commitCreates([{ collection: "tattooSandboxDiagnostics", id: journalId("probe", "failure"), data: { kind: "test" } }]), error => {
+      assert.equal(error.message, "sandbox_firestore_commit_failed");
+      assert.equal(error.httpStatus, status);
+      const logs = [];
+      const diagnostic = reportTattooSandboxFailure("sandbox_journal_write", error, { env, logger: line => logs.push(line) });
+      assert.deepEqual(diagnostic, { stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: status });
+      assert.equal(JSON.stringify({ error, logs, diagnostic }).includes("SYNTHETIC_PRIVATE"), false);
+      return true;
+    });
+    assert.equal(commits, 1);
+  }
+});
+
+test("official-shape payment.created and payment.updated without environment confirm only trusted orders", async () => {
+  for (const type of ["payment.created", "payment.updated"]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const notification = { ...charge, type };
+    assert.equal(Object.hasOwn(notification, "environment"), false);
+    const res = await handleTattooSandboxWebhook(request(JSON.stringify(notification)), { env, getStore: () => store });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).outcome, "confirmed_charge");
+    assert.equal([...store.documents.values()].every(row => row.studioCreditIssued !== true), true);
+  }
+});
+
+test("environment is optional metadata, never a substitute for configuration or signature", async () => {
+  for (const value of ["production", "", null, 1, {}, []]) {
+    const raw = JSON.stringify({ ...charge, environment: value });
+    const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => { throw Error("must not access store"); } });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).outcome, "invalid_square_event");
+  }
+  for (const value of ["sandbox", "SANDBOX"]) {
+    const raw = JSON.stringify({ ...charge, environment: value });
+    assert.ok(parseTattooSquareEvent(raw));
+    const invalid = await handleTattooSandboxWebhook(request(raw, "AAAA"), { env });
+    assert.equal(invalid.status, 401);
+    const production = await handleTattooSandboxWebhook(request(raw), { env: { ...env, VERCEL_ENV: "production" } });
+    assert.equal(production.status, 503);
+  }
+});
+
+test("wrong order, location, currency or amount never confirms even a signed notification", async () => {
+  for (const patch of [
+    { order_id: "wrong-order" }, { location_id: "wrong-location" },
+    { amount_money: { amount: 25000, currency: "USD" } },
+    { amount_money: { amount: 25001, currency: "CAD" } },
+  ]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const raw = JSON.stringify({ ...charge, data: { ...charge.data, object: { payment: { ...charge.data.object.payment, ...patch } } } });
+    const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+    assert.equal(res.status, patch.order_id ? 503 : 200);
+    assert.equal((await res.json()).outcome, patch.order_id ? "sandbox_journal_unavailable" : "unlinked");
+    assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")), null);
+    assert.equal([...store.documents.values()].every(row => row.studioCreditIssued !== true), true);
+  }
+});
+
+test("malformed and oversized signed bodies reject before any journal access", async () => {
+  const getStore = () => { throw Error("invalid event must not reach storage"); };
+  for (const raw of ["{broken", "null", "[]", "42", '"text"', "{}", JSON.stringify({ ...charge, event_id: "" })]) {
+    assert.equal(parseTattooSquareEvent(raw), null);
+    assert.equal((await handleTattooSandboxWebhook(request(raw), { env, getStore })).status, 400);
+  }
+  const oversized = JSON.stringify({ ...charge, padding: "é".repeat(WEBHOOK_MAX_BYTES) });
+  assert.equal(parseTattooSquareEvent(oversized), null);
+  assert.equal((await handleTattooSandboxWebhook(request(oversized), { env, getStore })).status, 413);
+  const declared = request(JSON.stringify(charge));
+  declared.headers.set("content-length", String(WEBHOOK_MAX_BYTES + 1));
+  assert.equal((await handleTattooSandboxWebhook(declared, { env, getStore })).status, 413);
+});
+
+test("official-shape refund and dispute envelopes remain review-only through the signed handler", async () => {
+  for (const type of ["refund.created", "refund.updated", "dispute.created", "dispute.state.updated"]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    await handleTattooSandboxWebhook(request(JSON.stringify(charge)), { env, getStore: () => store });
+    const refund = type.startsWith("refund.");
+    const payload = refund ? { refund: { id: "refund-1", payment_id: "payment-123", order_id: "order_abc", location_id: "square-sandbox-loc", status: "COMPLETED", amount_money: { amount: 5000, currency: "CAD" } } }
+      : { dispute: { id: "dispute-1", disputed_payment: { payment_id: "payment-123" }, location_id: "square-sandbox-loc", state: "EVIDENCE_REQUIRED", amount_money: { amount: 25000, currency: "CAD" } } };
+    const raw = JSON.stringify(event(type, payload, "review-event-123"));
+    const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).outcome, refund ? "refund_review" : "dispute_review");
+    assert.equal([...store.documents.values()].every(row => row.studioCreditIssued !== true), true);
+  }
+});
+
+test("create races fail closed and same-event redelivery recovers without duplicate charges", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const raw = JSON.stringify(charge);
+  const replies = await Promise.all([1, 2].map(() => handleTattooSandboxWebhook(request(raw), { env, getStore: () => store })));
+  assert.deepEqual(replies.map(res => res.status).sort(), [200, 503]);
+  const retry = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).outcome, "confirmed_charge");
+  assert.equal([...store.documents.keys()].filter(key => key.startsWith("tattooSandboxTransactions/")).length, 1);
+  const changed = JSON.stringify({ ...charge, created_at: "2026-10-18T20:00:00Z" });
+  assert.equal((await handleTattooSandboxWebhook(request(changed), { env, getStore: () => store })).status, 503);
+});
+
+test("out-of-order CARD notification retries once trusted journal is visible", async () => {
+  const store = fakeStore();
+  const raw = JSON.stringify(charge);
+  const first = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal(first.status, 503);
+  assert.equal(store.documents.size, 0);
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const again = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal((await again.json()).outcome, "confirmed_charge");
+  assert.ok(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")));
+});
+
+
+test("signed external bookkeeping payments never confirm despite matching trusted checkout", async () => {
+  for (const sourceType of ["EXTERNAL", "CASH", "BANK_ACCOUNT", "WALLET", "BUY_NOW_PAY_LATER", "SQUARE_ACCOUNT", "UNKNOWN", "card", "", null, undefined]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const payment = { ...charge.data.object.payment, source_type: sourceType };
+    delete payment.card_details;
+    if (sourceType === undefined) delete payment.source_type;
+    if (sourceType === "EXTERNAL") payment.external_details = { source: "Developer Control Panel", type: "CARD" };
+    const notification = event("payment.updated", { payment }, "event-source-123");
+    const raw = JSON.stringify(notification);
+    for (let delivery = 0; delivery < 2; delivery++) {
+      const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+      assert.equal(res.status, 200);
+      assert.equal((await res.json()).outcome, "unlinked");
+    }
+    const record = await store.read("tattooSandboxWebhookEvents", journalId("event", notification.event_id));
+    assert.equal(record.reason, "unsupported_payment_source");
+    assert.equal(record.signatureValidated, true);
+    assert.equal(record.providerConfirmed, false);
+    assert.equal(record.studioCreditIssued, false);
+    assert.equal([...store.documents.keys()].filter(key => key.startsWith("tattooSandboxTransactions/")).length, 0);
+    assert.equal(store.documents.size, 3);
+  }
+});
+
+test("CARD with contradictory external details also fails closed", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const payment = { ...charge.data.object.payment, external_details: { source: "Developer Control Panel", type: "CARD" } };
+  const raw = JSON.stringify(event("payment.updated", { payment }, "event-contradiction-123"));
+  const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal((await res.json()).outcome, "unlinked");
+  assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", payment.id)), null);
+});
+
+test("legacy external confirmations remain untouched and require manual review", async () => {
+  const store = fakeStore();
+  const payment = { ...charge.data.object.payment, source_type: "EXTERNAL", external_details: { source: "Developer Control Panel", type: "CARD" } };
+  delete payment.card_details;
+  const notification = event("payment.updated", { payment }, "legacy-event-123");
+  const raw = JSON.stringify(notification);
+  const { webhookDigest } = await import("../../lib/payments/tattooSandboxWebhook.mjs");
+  await store.commitCreates([
+    { collection: "tattooSandboxWebhookEvents", id: journalId("event", notification.event_id), data: { eventId: notification.event_id, payloadHash: webhookDigest(raw), outcome: "confirmed_charge", providerConfirmed: false, studioCreditIssued: false } },
+    { collection: "tattooSandboxTransactions", id: journalId("charge", payment.id), data: { kind: "confirmed_charge", providerConfirmed: true, studioCreditIssued: false } },
+  ]);
+  const before = structuredClone([...store.documents]);
+  const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal(res.status, 200);
+  // Legacy receipt is preserved but no longer returned as fresh confirmation.
+  assert.equal((await res.json()).outcome, "historical_confirmation_review_required");
+  assert.deepEqual([...store.documents], before);
+});
+
+
+test("GetPayment transport is Sandbox-only, bounded, no redirects and never exposes provider errors", async () => {
+  const { getTattooSandboxPayment } = await import("../../lib/payments/tattooSandboxPaymentVerification.mjs");
+  const fetcher = async (url, options) => {
+    assert.equal(url, "https://connect.squareupsandbox.com/v2/payments/payment-123");
+    assert.equal(options.method, "GET");
+    assert.equal(options.headers.Authorization, "Bearer sandbox-token");
+    assert.equal(options.headers["Square-Version"], "2026-09-16");
+    assert.equal(options.cache, "no-store");
+    assert.equal(options.redirect, "error");
+    assert.ok(options.signal);
+    return mockPaymentFetch();
+  };
+  assert.equal((await getTattooSandboxPayment("payment-123", { env, fetcher })).id, "payment-123");
+  for (const paymentId of ["../secrets", "https://evil.invalid", "", null]) {
+    await assert.rejects(getTattooSandboxPayment(paymentId, { env, fetcher }), /verification_disabled/);
+  }
+  await assert.rejects(getTattooSandboxPayment("payment-123", { env: { ...env, VERCEL_ENV: "production" }, fetcher }), /verification_disabled/);
+  for (const response of [new Response("private error", { status: 401 }), new Response("bad json"), new Response("x".repeat(65537)), new Response('{}')]) {
+    await assert.rejects(getTattooSandboxPayment("payment-123", { env, fetcher: async () => response }), { message: "sandbox_payment_readback_unavailable" });
+  }
+});
+
+test("matching CARD readback confirms with versioned evidence and never persists card data or token", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  let calls = 0;
+  const fetcher = async () => { calls++; return mockPaymentFetch(); };
+  const raw = JSON.stringify(charge);
+  for (let i = 0; i < 2; i++) {
+    const res = await realHandler(request(raw), { env, fetcher, getStore: () => store });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).outcome, "confirmed_charge");
+  }
+  assert.equal(calls, 1);
+  const row = await store.read("tattooSandboxTransactions", journalId("charge", "payment-123"));
+  assert.equal(row.providerReadbackVerified, true);
+  assert.equal(row.paymentVerificationVersion, 1);
+  assert.equal(row.sourceType, "CARD");
+  assert.equal(row.studioCreditIssued, false);
+  const persisted = JSON.stringify([...store.documents]);
+  for (const secret of ["sandbox-token", "card_details", "last_4"]) assert.equal(persisted.includes(secret), false);
+});
+
+test("provider readback contradictions never confirm a signed matching webhook", async () => {
+  for (const patch of [
+    { id: "wrong-payment" }, { order_id: "wrong-order" }, { location_id: "wrong-location" },
+    { amount_money: { amount: 25001, currency: "CAD" } },
+    { amount_money: { amount: 25000, currency: "USD" } },
+    { status: "CANCELED" }, { source_type: "EXTERNAL", external_details: { source: "Developer Control Panel", type: "CARD" } },
+    { external_details: null }, { source_type: "CASH" }, { source_type: undefined },
+    { card_details: { status: "AUTHORIZED" } }, { card_details: null },
+    { card_details: { status: "CAPTURED", card: { card_type: "GIFT" } } },
+  ]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const fetcher = async () => new Response(JSON.stringify({ payment: { ...charge.data.object.payment, ...patch } }));
+    const res = await realHandler(request(JSON.stringify(charge)), { env, fetcher, getStore: () => store });
+    assert.equal((await res.json()).outcome, "unlinked");
+    assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")), null);
+    assert.equal([...store.documents.values()].some(row => row.studioCreditIssued === true), false);
+  }
+});
+
+test("unavailable readback leaves no event tombstone and identical delivery can retry", async () => {
+  for (const fetcher of [
+    async () => { throw Error("secret timeout details"); },
+    ...[401, 403, 404, 429, 500, 503].map(status => async () => new Response("private provider response", { status })),
+    async () => new Response("malformed"),
+  ]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const raw = JSON.stringify(charge);
+    const res = await realHandler(request(raw), { env, fetcher, getStore: () => store });
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { outcome: "sandbox_journal_unavailable" });
+    assert.equal(store.documents.size, 2);
+    const retry = await realHandler(request(raw), { env, fetcher: mockPaymentFetch, getStore: () => store });
+    assert.equal((await retry.json()).outcome, "confirmed_charge");
+    assert.equal(store.documents.size, 4);
+  }
+});
+
+test("EXTERNAL webhook does not call provider or confirm; legacy charges are ineligible", async () => {
+  const { isVerifiedSandboxCharge } = await import("../../lib/payments/tattooSandboxPaymentVerification.mjs");
+  assert.equal(isVerifiedSandboxCharge({ kind: "confirmed_charge", providerConfirmed: true }), false);
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const payment = { ...charge.data.object.payment, source_type: "EXTERNAL", external_details: { source: "Developer Control Panel", type: "CARD" } };
+  const raw = JSON.stringify(event("payment.updated", { payment }, "external-readback-test"));
+  const res = await realHandler(request(raw), { env, fetcher: async () => { throw Error("must not fetch"); }, getStore: () => store });
+  assert.equal((await res.json()).outcome, "unlinked");
+  assert.equal(store.documents.size, 3);
+});
+
+
+test("pending provider state is retryable and missing captured details are optional", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const raw = JSON.stringify(charge);
+  for (const status of ["PENDING", "APPROVED"]) {
+    const fetcher = async () => new Response(JSON.stringify({ payment: { ...charge.data.object.payment, status } }));
+    assert.equal((await realHandler(request(raw), { env, fetcher, getStore: () => store })).status, 503);
+    assert.equal(store.documents.size, 2);
+  }
+  const payment = { ...charge.data.object.payment };
+  delete payment.card_details;
+  const res = await realHandler(request(raw), { env, fetcher: async () => new Response(JSON.stringify({ payment })), getStore: () => store });
+  assert.equal((await res.json()).outcome, "confirmed_charge");
+});
+
+test("new deliveries cannot upgrade legacy transactions or use them for refund reconciliation", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const key = journalId("charge", "payment-123");
+  const legacy = { kind: "confirmed_charge", providerId: "payment-123", orderId: journalId("checkout", idempotencyKey), amountCents: 25000, providerConfirmed: true, studioCreditIssued: false };
+  await store.commitCreates([{ collection: "tattooSandboxTransactions", id: key, data: legacy }]);
+  const res = await handleTattooSandboxWebhook(request(JSON.stringify(charge)), { env, getStore: () => store });
+  assert.equal((await res.json()).outcome, "unlinked");
+  assert.equal((await store.read("tattooSandboxWebhookEvents", journalId("event", charge.event_id))).reason, "historical_confirmation_requires_review");
+  const refund = event("refund.updated", { refund: { id: "legacy-refund", payment_id: "payment-123", status: "COMPLETED", amount_money: { amount: 100, currency: "CAD" } } }, "legacy-refund-event");
+  const result = await handleTattooSandboxWebhook(request(JSON.stringify(refund)), { env, getStore: () => store });
+  assert.equal((await result.json()).outcome, "unlinked");
+  assert.deepEqual(await store.read("tattooSandboxTransactions", key), legacy);
+  assert.equal(await store.read("tattooSandboxTransactions", journalId("refund", "legacy-refund")), null);
 });
