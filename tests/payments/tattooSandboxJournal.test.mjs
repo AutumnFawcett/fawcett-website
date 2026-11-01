@@ -6,8 +6,8 @@ import {
   journalId, classifyTattooEvent,
 } from "../../lib/payments/tattooSandboxWebhook.mjs";
 import { reportTattooSandboxFailure } from "../../lib/payments/tattooSandboxDiagnostics.mjs";
-import { makeTattooSandboxStore, recordSandboxCheckout, journalVerifiedTattooEvent } from "../../lib/payments/tattooSandboxStore.mjs";
-import { handleTattooSandboxWebhook } from "../../lib/payments/tattooSandboxWebhookHandler.mjs";
+import { makeTattooSandboxStore, recordSandboxCheckout, journalVerifiedTattooEvent as realJournal } from "../../lib/payments/tattooSandboxStore.mjs";
+import { handleTattooSandboxWebhook as realHandler } from "../../lib/payments/tattooSandboxWebhookHandler.mjs";
 
 const endpoint = "https://fawcett-test-branch.vercel.app/api/payments/webhooks/tattoo-sandbox";
 const env = {
@@ -49,6 +49,9 @@ const charge = event("payment.updated", {
     card_details: { status: "CAPTURED", card: { card_brand: "VISA", card_type: "CREDIT", last_4: "1111" } }, location_id: "square-sandbox-loc",
     order_id: "order_abc", amount_money: { amount: 25000, currency: "CAD" } },
 }, "event-charge-123");
+const mockPaymentFetch = async () => new Response(JSON.stringify({ payment: charge.data.object.payment }), { status: 200 });
+const handleTattooSandboxWebhook = (req, options = {}) => realHandler(req, { fetcher: mockPaymentFetch, ...options });
+const journalVerifiedTattooEvent = options => realJournal({ readPayment: async () => structuredClone(charge.data.object.payment), ...options });
 const signature = raw => createHmac("sha256",env.SQUARE_TATTOO_SANDBOX_SIGNATURE_KEY)
   .update(endpoint + raw, "utf8").digest("base64");
 const request = (raw, sig=signature(raw), url=endpoint) => new Request(url, {
@@ -297,8 +300,8 @@ test("wrong order, location, currency or amount never confirms even a signed not
     await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
     const raw = JSON.stringify({ ...charge, data: { ...charge.data, object: { payment: { ...charge.data.object.payment, ...patch } } } });
     const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
-    assert.equal(res.status, 200);
-    assert.equal((await res.json()).outcome, "unlinked");
+    assert.equal(res.status, patch.order_id ? 503 : 200);
+    assert.equal((await res.json()).outcome, patch.order_id ? "sandbox_journal_unavailable" : "unlinked");
     assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")), null);
     assert.equal([...store.documents.values()].every(row => row.studioCreditIssued !== true), true);
   }
@@ -348,15 +351,16 @@ test("create races fail closed and same-event redelivery recovers without duplic
   assert.equal((await handleTattooSandboxWebhook(request(changed), { env, getStore: () => store })).status, 503);
 });
 
-test("out-of-order unlinked notifications stay unconfirmed on identical redelivery", async () => {
+test("out-of-order CARD notification retries once trusted journal is visible", async () => {
   const store = fakeStore();
   const raw = JSON.stringify(charge);
   const first = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
-  assert.equal((await first.json()).outcome, "unlinked");
+  assert.equal(first.status, 503);
+  assert.equal(store.documents.size, 0);
   await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
   const again = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
-  assert.equal((await again.json()).outcome, "unlinked");
-  assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")), null);
+  assert.equal((await again.json()).outcome, "confirmed_charge");
+  assert.ok(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")));
 });
 
 
@@ -409,7 +413,134 @@ test("legacy external confirmations remain untouched and require manual review",
   const before = structuredClone([...store.documents]);
   const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
   assert.equal(res.status, 200);
-  // Replay returns the historical outcome; it is not fresh source verification.
-  assert.equal((await res.json()).outcome, "confirmed_charge");
+  // Legacy receipt is preserved but no longer returned as fresh confirmation.
+  assert.equal((await res.json()).outcome, "historical_confirmation_review_required");
   assert.deepEqual([...store.documents], before);
+});
+
+
+test("GetPayment transport is Sandbox-only, bounded, no redirects and never exposes provider errors", async () => {
+  const { getTattooSandboxPayment } = await import("../../lib/payments/tattooSandboxPaymentVerification.mjs");
+  const fetcher = async (url, options) => {
+    assert.equal(url, "https://connect.squareupsandbox.com/v2/payments/payment-123");
+    assert.equal(options.method, "GET");
+    assert.equal(options.headers.Authorization, "Bearer sandbox-token");
+    assert.equal(options.headers["Square-Version"], "2026-09-16");
+    assert.equal(options.cache, "no-store");
+    assert.equal(options.redirect, "error");
+    assert.ok(options.signal);
+    return mockPaymentFetch();
+  };
+  assert.equal((await getTattooSandboxPayment("payment-123", { env, fetcher })).id, "payment-123");
+  for (const paymentId of ["../secrets", "https://evil.invalid", "", null]) {
+    await assert.rejects(getTattooSandboxPayment(paymentId, { env, fetcher }), /verification_disabled/);
+  }
+  await assert.rejects(getTattooSandboxPayment("payment-123", { env: { ...env, VERCEL_ENV: "production" }, fetcher }), /verification_disabled/);
+  for (const response of [new Response("private error", { status: 401 }), new Response("bad json"), new Response("x".repeat(65537)), new Response('{}')]) {
+    await assert.rejects(getTattooSandboxPayment("payment-123", { env, fetcher: async () => response }), { message: "sandbox_payment_readback_unavailable" });
+  }
+});
+
+test("matching CARD readback confirms with versioned evidence and never persists card data or token", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  let calls = 0;
+  const fetcher = async () => { calls++; return mockPaymentFetch(); };
+  const raw = JSON.stringify(charge);
+  for (let i = 0; i < 2; i++) {
+    const res = await realHandler(request(raw), { env, fetcher, getStore: () => store });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).outcome, "confirmed_charge");
+  }
+  assert.equal(calls, 1);
+  const row = await store.read("tattooSandboxTransactions", journalId("charge", "payment-123"));
+  assert.equal(row.providerReadbackVerified, true);
+  assert.equal(row.paymentVerificationVersion, 1);
+  assert.equal(row.sourceType, "CARD");
+  assert.equal(row.studioCreditIssued, false);
+  const persisted = JSON.stringify([...store.documents]);
+  for (const secret of ["sandbox-token", "card_details", "last_4"]) assert.equal(persisted.includes(secret), false);
+});
+
+test("provider readback contradictions never confirm a signed matching webhook", async () => {
+  for (const patch of [
+    { id: "wrong-payment" }, { order_id: "wrong-order" }, { location_id: "wrong-location" },
+    { amount_money: { amount: 25001, currency: "CAD" } },
+    { amount_money: { amount: 25000, currency: "USD" } },
+    { status: "CANCELED" }, { source_type: "EXTERNAL", external_details: { source: "Developer Control Panel", type: "CARD" } },
+    { external_details: null }, { source_type: "CASH" }, { source_type: undefined },
+    { card_details: { status: "AUTHORIZED" } }, { card_details: null },
+    { card_details: { status: "CAPTURED", card: { card_type: "GIFT" } } },
+  ]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const fetcher = async () => new Response(JSON.stringify({ payment: { ...charge.data.object.payment, ...patch } }));
+    const res = await realHandler(request(JSON.stringify(charge)), { env, fetcher, getStore: () => store });
+    assert.equal((await res.json()).outcome, "unlinked");
+    assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")), null);
+    assert.equal([...store.documents.values()].some(row => row.studioCreditIssued === true), false);
+  }
+});
+
+test("unavailable readback leaves no event tombstone and identical delivery can retry", async () => {
+  for (const fetcher of [
+    async () => { throw Error("secret timeout details"); },
+    ...[401, 403, 404, 429, 500, 503].map(status => async () => new Response("private provider response", { status })),
+    async () => new Response("malformed"),
+  ]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const raw = JSON.stringify(charge);
+    const res = await realHandler(request(raw), { env, fetcher, getStore: () => store });
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { outcome: "sandbox_journal_unavailable" });
+    assert.equal(store.documents.size, 2);
+    const retry = await realHandler(request(raw), { env, fetcher: mockPaymentFetch, getStore: () => store });
+    assert.equal((await retry.json()).outcome, "confirmed_charge");
+    assert.equal(store.documents.size, 4);
+  }
+});
+
+test("EXTERNAL webhook does not call provider or confirm; legacy charges are ineligible", async () => {
+  const { isVerifiedSandboxCharge } = await import("../../lib/payments/tattooSandboxPaymentVerification.mjs");
+  assert.equal(isVerifiedSandboxCharge({ kind: "confirmed_charge", providerConfirmed: true }), false);
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const payment = { ...charge.data.object.payment, source_type: "EXTERNAL", external_details: { source: "Developer Control Panel", type: "CARD" } };
+  const raw = JSON.stringify(event("payment.updated", { payment }, "external-readback-test"));
+  const res = await realHandler(request(raw), { env, fetcher: async () => { throw Error("must not fetch"); }, getStore: () => store });
+  assert.equal((await res.json()).outcome, "unlinked");
+  assert.equal(store.documents.size, 3);
+});
+
+
+test("pending provider state is retryable and missing captured details are optional", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const raw = JSON.stringify(charge);
+  for (const status of ["PENDING", "APPROVED"]) {
+    const fetcher = async () => new Response(JSON.stringify({ payment: { ...charge.data.object.payment, status } }));
+    assert.equal((await realHandler(request(raw), { env, fetcher, getStore: () => store })).status, 503);
+    assert.equal(store.documents.size, 2);
+  }
+  const payment = { ...charge.data.object.payment };
+  delete payment.card_details;
+  const res = await realHandler(request(raw), { env, fetcher: async () => new Response(JSON.stringify({ payment })), getStore: () => store });
+  assert.equal((await res.json()).outcome, "confirmed_charge");
+});
+
+test("new deliveries cannot upgrade legacy transactions or use them for refund reconciliation", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const key = journalId("charge", "payment-123");
+  const legacy = { kind: "confirmed_charge", providerId: "payment-123", orderId: journalId("checkout", idempotencyKey), amountCents: 25000, providerConfirmed: true, studioCreditIssued: false };
+  await store.commitCreates([{ collection: "tattooSandboxTransactions", id: key, data: legacy }]);
+  const res = await handleTattooSandboxWebhook(request(JSON.stringify(charge)), { env, getStore: () => store });
+  assert.equal((await res.json()).outcome, "unlinked");
+  assert.equal((await store.read("tattooSandboxWebhookEvents", journalId("event", charge.event_id))).reason, "historical_confirmation_requires_review");
+  const refund = event("refund.updated", { refund: { id: "legacy-refund", payment_id: "payment-123", status: "COMPLETED", amount_money: { amount: 100, currency: "CAD" } } }, "legacy-refund-event");
+  const result = await handleTattooSandboxWebhook(request(JSON.stringify(refund)), { env, getStore: () => store });
+  assert.equal((await result.json()).outcome, "unlinked");
+  assert.deepEqual(await store.read("tattooSandboxTransactions", key), legacy);
+  assert.equal(await store.read("tattooSandboxTransactions", journalId("refund", "legacy-refund")), null);
 });

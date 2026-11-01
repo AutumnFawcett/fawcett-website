@@ -226,3 +226,99 @@ Official references:
 - https://developer.squareup.com/reference/square/objects/Payment
 - https://developer.squareup.com/docs/checkout-api/guidelines-and-limitations
 - https://developer.squareup.com/reference/square/payments-api/get-payment
+
+## Server-side GetPayment readback (supersedes earlier verification gates)
+
+New confirmations now require GET against the fixed Sandbox Payments API host,
+using only the existing server-side Sandbox access token, API version 2026-09-16,
+no cache, no redirects, an 8-second timeout and a 64-KiB streamed response limit.
+Signature/configuration checks run first. No client route or UI accepts a token
+or exposes readback. No raw response, card details or credentials are persisted
+or logged. Failure responses retain the existing generic 503 outcome.
+
+The retrieved payment must match webhook payment ID and the trusted journal's
+Square order ID, location, exact integer amount and CAD currency; status must be
+COMPLETED and source_type must be CARD, without any external_details property.
+When card_details exists, CAPTURED is required on both retrieved and webhook
+payments. When card_type is supplied, CREDIT/DEBIT only. Missing optional card
+details do not bypass required source/status/identity checks. A successful
+readback is evidence of a completed Sandbox card simulation, not bank settlement.
+
+New confirmed transactions store providerReadbackVerified=true,
+paymentVerificationVersion=1 and sourceType=CARD. isVerifiedSandboxCharge is the
+mandatory minimum eligibility predicate for future reconciliation (in addition
+to trusted order identity, amount, location and business authorization checks).
+No client-credit or revenue reconciliation is enabled by this release. The
+current journal uses this predicate before linking refund/dispute reviews.
+Historical providerConfirmed=true is insufficient.
+
+### Failure, replay and concurrency policy
+- Network errors, timeout, invalid/oversized JSON, missing payment object and
+  non-2xx responses (including 404, 429 and auth failures) return 503 with no
+  event/transaction commit. Correct configuration or await recovery; redeliver
+  the same event only under separate owner approval. No automatic provider retry
+  loop runs inside the webhook handler.
+- Provider PENDING/APPROVED is retryable with no event commit. Definitive
+  contradictions are journaled unlinked/provider_payment_mismatch and never
+  create a confirmed transaction. They require manual review, not automatic
+  mutation or relinking of the same event.
+- A completed CARD event whose trusted order/lookup is missing returns 503
+  without an event tombstone. Identical delivery can reconcile after the journal
+  becomes visible. Wrong unknown orders also remain unconfirmed/retryable.
+- Already verified identical event deliveries reuse versioned evidence without
+  another provider request; changed payload under the same event ID fails closed.
+  Different event IDs for the same payment read back again but reuse the same
+  create-only payment transaction. Concurrent creates retain 200/503 semantics;
+  redelivery recovers without duplicate charge records. No distributed lock added.
+- Historical confirmed events now return historical_confirmation_review_required
+  instead of claiming fresh confirmation. Stored bytes are unchanged. New events
+  cannot upgrade existing unversioned charges and are flagged
+  historical_confirmation_requires_review. No backfill/migration is performed.
+- Refund/dispute review records still are not a complete status history or
+  automatic financial reversal. Out-of-order refunds/disputes without an eligible
+  charge remain unlinked and need manual review; no credit or revenue is issued.
+
+### Acceptance A — Sandbox Payments API CARD simulation (NOT hosted checkout)
+Prepared procedure only; requires separate owner approval and a reviewed isolated
+test harness before any write/payment request. Do not run it as part of this task.
+1. Verify corrected READY Preview, matching Sandbox subscription URL, disabled
+   Production checkout, and existing Sandbox credentials' PAYMENTS_READ access.
+   Credential presence is not proof of API authorization; do not print tokens.
+2. Prepare one fresh, owner-controlled, payable Sandbox order and corresponding
+   trusted isolated order+lookup journal, exact 100 CAD cents, correct location,
+   no tips/add-ons. The existing hosted simulator's EXTERNAL payment/order must
+   not be reused. A separately reviewed harness must establish order payability
+   and journal linkage; this change adds no order/payment creation endpoint.
+3. Through the separately approved server-side harness/API Explorer in Sandbox,
+   use Payments API CreatePayment with documented source_id=cnon:card-nonce-ok,
+   a fresh idempotency key, autocomplete=true, amount_money 100 CAD, trusted
+   location_id and order_id. Never expose the access token to app client code or
+   persist source tokens. No real card; no hosted Test Payment simulator.
+4. Require returned CARD/COMPLETED, matching identity/amount/location, and CAPTURED
+   card_details when present. Let the resulting real Sandbox notification arrive;
+   do not manufacture a matching webhook. Confirm delivery HTTP 200 and
+   confirmed_charge, then exactly one transaction with versioned readback evidence
+   and studioCreditIssued=false. Correlate IDs locally, never publish them.
+5. Redelivery, refunds and concurrency tests require separate approval. This API
+   simulation proves the backend card/readback path only, not hosted card entry,
+   redirect behavior, customer checkout UX or bank settlement.
+
+### Acceptance B — future real-card Production hosted checkout
+BLOCKED: Production remains disabled. Requires a separate reviewed Production
+implementation, explicit owner approval of real charge amount/fees, business
+terms/tax treatment, reconciliation and refund plan, and dedicated Production
+credentials/signature configuration. Never switch this Sandbox transport to a
+Production host or relax its Preview guards.
+After those gates only: one owner-controlled hosted checkout, verify real card
+entry, final agreed total and redirect, Production GetPayment readback + trusted
+order/location/amount + CARD/COMPLETED/capture evidence, matching signed delivery
+and a single correctly reconciled transaction. Refund only with explicit approved
+scope; normal processing fees may apply. Sandbox success cannot authorize this.
+
+Square support's October 28, 2026 answer confirms hosted Sandbox does not allow
+test-card entry; its Test Payment button simulates completion. Do not attempt to
+force a CARD result or count EXTERNAL as CARD. This supersedes the older generic
+Sandbox test-card instructions earlier in this document.
+- https://developer.squareup.com/forums/t/unable-to-test-payment-flow-in-sandbox-for-square-hosted-checkout-page/27682
+- https://developer.squareup.com/reference/square/payments-api/get-payment
+- https://developer.squareup.com/docs/devtools/sandbox/payments
