@@ -194,3 +194,62 @@ test("Firestore 403 diagnostic exposes only an allowlisted permission identifier
     return true;
   });
 });
+
+test("REST store uses HTTPS transport URLs and resource-only create names in the exact atomic payload", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const calls = [];
+  const root = "projects/fawcett-website-sandbox/databases/(default)/documents";
+  const ids = [journalId("probe", "payload-first"), journalId("probe", "payload-second")];
+  const store = makeTattooSandboxStore({
+    env: { ...env, SQUARE_TATTOO_SANDBOX_JOURNAL_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }) },
+    fetcher: async (url, options) => {
+      calls.push({ url, options });
+      if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "synthetic-token", expires_in: 3600 });
+      if (options.method === "POST") return Response.json({ writeResults: [{}, {}] });
+      return new Response(null, { status: 404 });
+    },
+  });
+  assert.equal(await store.read("tattooSandboxDiagnostics", ids[0]), null);
+  await store.commitCreates(ids.map(id => ({ collection: "tattooSandboxDiagnostics", id,
+    data: { kind: "journal_preflight", version: 1, environment: "sandbox", confirmed: false } })));
+  assert.equal(calls.length, 3);
+  assert.equal(calls[1].url, "https://firestore.googleapis.com/v1/" + root + "/tattooSandboxDiagnostics/" + ids[0]);
+  const commit = calls[2];
+  assert.equal(commit.url, "https://firestore.googleapis.com/v1/" + root + ":commit");
+  assert.equal(commit.options.method, "POST");
+  assert.equal(commit.options.headers.Authorization, "Bearer synthetic-token");
+  assert.equal(commit.options.headers["Content-Type"], "application/json");
+  assert.equal(commit.options.cache, "no-store");
+  assert.deepEqual(JSON.parse(commit.options.body), { writes: ids.map(id => ({
+    update: { name: root + "/tattooSandboxDiagnostics/" + id, fields: {
+      kind: { stringValue: "journal_preflight" }, version: { integerValue: "1" },
+      environment: { stringValue: "sandbox" }, confirmed: { booleanValue: false },
+    } }, currentDocument: { exists: false },
+  })) });
+});
+
+test("REST commit failures never retry, overwrite existing documents, or expose raw Google bodies", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  for (const status of [400, 403, 409, 500]) {
+    let commits = 0;
+    const store = makeTattooSandboxStore({
+      env: { ...env, SQUARE_TATTOO_SANDBOX_JOURNAL_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }) },
+      fetcher: async (url, options) => {
+        if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "synthetic-token", expires_in: 3600 });
+        commits++;
+        assert.deepEqual(JSON.parse(options.body).writes[0].currentDocument, { exists: false });
+        return new Response("SYNTHETIC_PRIVATE_GOOGLE_BODY", { status });
+      },
+    });
+    await assert.rejects(store.commitCreates([{ collection: "tattooSandboxDiagnostics", id: journalId("probe", "failure"), data: { kind: "test" } }]), error => {
+      assert.equal(error.message, "sandbox_firestore_commit_failed");
+      assert.equal(error.httpStatus, status);
+      const logs = [];
+      const diagnostic = reportTattooSandboxFailure("sandbox_journal_write", error, { env, logger: line => logs.push(line) });
+      assert.deepEqual(diagnostic, { stage: "sandbox_journal_write", reason: "sandbox_firestore_commit_failed", httpStatus: status });
+      assert.equal(JSON.stringify({ error, logs, diagnostic }).includes("SYNTHETIC_PRIVATE"), false);
+      return true;
+    });
+    assert.equal(commits, 1);
+  }
+});

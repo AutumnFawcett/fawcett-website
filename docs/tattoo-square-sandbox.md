@@ -88,3 +88,46 @@ Share only the allowlisted diagnostic fields. If no recognized Google details
 are present, retain the generic 403 result rather than guessing an IAM change;
 a separately approved owner-side read-only policy/permission investigation is
 then needed.
+
+## Resource-name correction and journal-only verification
+
+The REST store now separates `projects/.../documents/...` resource names in
+`writes[].update.name` from HTTPS URLs used for GET and commit transport. Each
+write retains `currentDocument: { exists: false }`; the two writes remain one
+atomic commit. This fixes a confirmed API-format defect, but the observed 403
+cause remains unproven until an owner-approved write succeeds.
+
+Official references:
+- https://firebase.google.com/docs/firestore/reference/rest/v1/projects.databases.documents#Document
+- https://firebase.google.com/docs/firestore/reference/rest/v1/Write
+
+After the corrected PR Preview is READY, the owner may separately authorize and
+perform this test (the coding agent must not perform authenticated writes):
+
+1. Open the exact corrected Preview deployment, sign in as an active studio
+   admin, and visit `/admin/payments`. Do not use the production domain.
+2. Click **Check Sandbox journal (no Square request)** once. Do not click the
+   checkout/link button or reuse the failed TAPOUT checkout.
+3. Expect POST `/api/admin/tattoo-checkout` HTTP 200 with exactly:
+   `{"sandboxJournalWritable":true,"squareCalled":false,"studioCreditIssued":false}`.
+   The UI says “Sandbox journal write passed. No Square link or payment was created.”
+4. To prove a NEW commit occurred, establish that both deterministic probe
+   documents were absent before this run, then confirm both exist afterward in
+   `(default)` → `tattooSandboxDiagnostics` in `fawcett-website-sandbox`, with
+   `kind: journal_preflight`, `version: 1`, `environment: sandbox` and new creation
+   timestamps. IDs are `journalId("probe", "fawcett-journal-preflight-v1-first")`
+   and `journalId("probe", "fawcett-journal-preflight-v1-second")` (SHA-256).
+   An HTTP 200 with existing probes proves reads only. Do not delete probes,
+   change IDs, or modify configuration to force a new write without approval.
+
+If the corrected Preview still returns 403, stop after that attempt. Inspect
+existing Google Cloud audit logs for the exact UTC request time in project
+`fawcett-website-sandbox`, filtering `protoPayload.serviceName="firestore.googleapis.com"`
+and `protoPayload.methodName="google.firestore.v1.Firestore.Commit"` (include
+Data Access and Policy Denied logs). Required evidence: principalEmail matching
+`tattoo-journal@fawcett-website-sandbox.iam.gserviceaccount.com`, resourceName,
+status code/message, authorizationInfo permission/resource/granted entries,
+and any policy-denial reason or VPC Service Controls violation metadata. Keep
+raw request bodies, document values, credentials and tokens private. If no log
+exists, report the logging/retention gap; do not infer a missing IAM permission
+or enable logging/change policies as part of this code-only task.
