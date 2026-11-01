@@ -168,3 +168,61 @@ and stable branch alias are not interchangeable for HMAC. Confirm payment event
 subscriptions and reachability without changing settings. Then separately
 authorize one new low-value Sandbox test. Do not retry TAPOUT or rerun writes as
 part of code verification. Preserve the owner-verified diagnostic documents.
+
+
+## External-payment confirmation correction (November 1, 2026)
+
+`COMPLETED` plus a matching order/amount/location does not establish a
+Square-processed charge. Square's external-payment documentation explicitly
+allows completed bookkeeping payments whose proceeds are not credited to the
+seller's Square account. `external_details.type=CARD` does not make
+`source_type=EXTERNAL` a Square card payment.
+
+For this restricted Sandbox Checkout flow, only exact `source_type=CARD` is
+eligible. EXTERNAL, CASH, missing/unknown types and all other source types are
+journaled `unlinked` with `unsupported_payment_source`; no charge is created.
+Even CARD with an external_details field fails closed. Existing trusted-order,
+location, exact CAD amount, COMPLETED, signature and Preview guards still apply.
+Sandbox Checkout documents credit/debit cards only; wallet, bank, Afterpay,
+Square-account and gift-card flows are not approved by this change. CARD is a
+source-category check, not an independent credit/debit product validation or
+proof of bank settlement. Sandbox never settles real funds.
+
+### Prior owner-run test: reclassified evidence
+The previously recorded November 1 $1 CAD Developer Control Panel payment was
+reported by the owner to have source_type=EXTERNAL and external_details.source=
+Developer Control Panel. Its existing confirmed_charge must be flagged for manual
+review, NOT counted as proof of Square-processed card acceptance. It proved
+signed delivery and journal plumbing only. Preserve all existing records.
+No Firestore migration/deletion/overwrite is part of this correction.
+
+Historical same-event replays return the previously stored outcome before
+classification. An old confirmed_charge response is therefore not new source
+verification. The regression explicitly preserves that behavior and records the
+review requirement; do not redeliver old events as proof this guard works.
+Existing transactions do not retain source_type, so identify candidates via
+owner-supplied payment IDs and original Square delivery payloads, not by guessing
+from COMPLETED/providerConfirmed. No automated record audit has been performed.
+
+### Provider verification and remaining gate
+A signed, matching CARD webhook is sufficient for the present isolated Sandbox
+journal classification; this correction does not add any provider API requests.
+Before live billing or Studio Credit, require a separate server-side Sandbox/
+Production-specific GetPayment readback/reconciliation design comparing payment
+ID, source_type, status, order, location, exact amount/currency and allowed card
+product, failing closed on discrepancies/unavailability. Readback must apply the
+same source guard: fetching a COMPLETED EXTERNAL payment does not repair it.
+Capture/payment completion is not proof of bank settlement; settlement claims
+need a separate settlement reconciliation process.
+
+No new payment test is authorized. Next establish an owner-approved procedure
+that actually produces a Square Sandbox CARD payment linked to the trusted
+order (the Developer Control Panel EXTERNAL simulator cannot satisfy it).
+Then separately authorize the test. Refund/dispute live tests, deliberate
+redelivery/concurrency, recovery/readback and Production readiness remain gated.
+
+Official references:
+- https://developer.squareup.com/docs/payments-api/take-payments/external-payments
+- https://developer.squareup.com/reference/square/objects/Payment
+- https://developer.squareup.com/docs/checkout-api/guidelines-and-limitations
+- https://developer.squareup.com/reference/square/payments-api/get-payment
