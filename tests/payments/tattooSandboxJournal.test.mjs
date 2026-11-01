@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac, generateKeyPairSync } from "node:crypto";
 import {
-  sandboxJournalEnabled, verifyTattooSquareSignature, parseTattooSquareEvent,
+  WEBHOOK_MAX_BYTES, sandboxJournalEnabled, verifyTattooSquareSignature, parseTattooSquareEvent,
   journalId, classifyTattooEvent,
 } from "../../lib/payments/tattooSandboxWebhook.mjs";
 import { reportTattooSandboxFailure } from "../../lib/payments/tattooSandboxDiagnostics.mjs";
@@ -39,8 +39,10 @@ const fakeStore = () => {
   };
 };
 const event = (type, payload, eventId) => ({
-  merchant_id: "test-merchant", environment: "sandbox", event_id: eventId, type,
-  data: { object: payload },
+  merchant_id: "test-merchant", event_id: eventId, type,
+  created_at: "2026-10-17T20:00:00.000Z",
+  ...(type.startsWith("dispute.") ? { location_id: "square-sandbox-loc" } : {}),
+  data: { type: Object.keys(payload)[0], id: Object.values(payload)[0].id, object: payload },
 });
 const charge = event("payment.updated", {
   payment: { id: "payment-123", status: "COMPLETED", location_id: "square-sandbox-loc",
@@ -252,4 +254,106 @@ test("REST commit failures never retry, overwrite existing documents, or expose 
     });
     assert.equal(commits, 1);
   }
+});
+
+test("official-shape payment.created and payment.updated without environment confirm only trusted orders", async () => {
+  for (const type of ["payment.created", "payment.updated"]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const notification = { ...charge, type };
+    assert.equal(Object.hasOwn(notification, "environment"), false);
+    const res = await handleTattooSandboxWebhook(request(JSON.stringify(notification)), { env, getStore: () => store });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).outcome, "confirmed_charge");
+    assert.equal([...store.documents.values()].every(row => row.studioCreditIssued !== true), true);
+  }
+});
+
+test("environment is optional metadata, never a substitute for configuration or signature", async () => {
+  for (const value of ["production", "", null, 1, {}, []]) {
+    const raw = JSON.stringify({ ...charge, environment: value });
+    const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => { throw Error("must not access store"); } });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).outcome, "invalid_square_event");
+  }
+  for (const value of ["sandbox", "SANDBOX"]) {
+    const raw = JSON.stringify({ ...charge, environment: value });
+    assert.ok(parseTattooSquareEvent(raw));
+    const invalid = await handleTattooSandboxWebhook(request(raw, "AAAA"), { env });
+    assert.equal(invalid.status, 401);
+    const production = await handleTattooSandboxWebhook(request(raw), { env: { ...env, VERCEL_ENV: "production" } });
+    assert.equal(production.status, 503);
+  }
+});
+
+test("wrong order, location, currency or amount never confirms even a signed notification", async () => {
+  for (const patch of [
+    { order_id: "wrong-order" }, { location_id: "wrong-location" },
+    { amount_money: { amount: 25000, currency: "USD" } },
+    { amount_money: { amount: 25001, currency: "CAD" } },
+  ]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    const raw = JSON.stringify({ ...charge, data: { ...charge.data, object: { payment: { ...charge.data.object.payment, ...patch } } } });
+    const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).outcome, "unlinked");
+    assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")), null);
+    assert.equal([...store.documents.values()].every(row => row.studioCreditIssued !== true), true);
+  }
+});
+
+test("malformed and oversized signed bodies reject before any journal access", async () => {
+  const getStore = () => { throw Error("invalid event must not reach storage"); };
+  for (const raw of ["{broken", "null", "[]", "42", '"text"', "{}", JSON.stringify({ ...charge, event_id: "" })]) {
+    assert.equal(parseTattooSquareEvent(raw), null);
+    assert.equal((await handleTattooSandboxWebhook(request(raw), { env, getStore })).status, 400);
+  }
+  const oversized = JSON.stringify({ ...charge, padding: "é".repeat(WEBHOOK_MAX_BYTES) });
+  assert.equal(parseTattooSquareEvent(oversized), null);
+  assert.equal((await handleTattooSandboxWebhook(request(oversized), { env, getStore })).status, 413);
+  const declared = request(JSON.stringify(charge));
+  declared.headers.set("content-length", String(WEBHOOK_MAX_BYTES + 1));
+  assert.equal((await handleTattooSandboxWebhook(declared, { env, getStore })).status, 413);
+});
+
+test("official-shape refund and dispute envelopes remain review-only through the signed handler", async () => {
+  for (const type of ["refund.created", "refund.updated", "dispute.created", "dispute.state.updated"]) {
+    const store = fakeStore();
+    await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+    await handleTattooSandboxWebhook(request(JSON.stringify(charge)), { env, getStore: () => store });
+    const refund = type.startsWith("refund.");
+    const payload = refund ? { refund: { id: "refund-1", payment_id: "payment-123", order_id: "order_abc", location_id: "square-sandbox-loc", status: "COMPLETED", amount_money: { amount: 5000, currency: "CAD" } } }
+      : { dispute: { id: "dispute-1", disputed_payment: { payment_id: "payment-123" }, location_id: "square-sandbox-loc", state: "EVIDENCE_REQUIRED", amount_money: { amount: 25000, currency: "CAD" } } };
+    const raw = JSON.stringify(event(type, payload, "review-event-123"));
+    const res = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).outcome, refund ? "refund_review" : "dispute_review");
+    assert.equal([...store.documents.values()].every(row => row.studioCreditIssued !== true), true);
+  }
+});
+
+test("create races fail closed and same-event redelivery recovers without duplicate charges", async () => {
+  const store = fakeStore();
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const raw = JSON.stringify(charge);
+  const replies = await Promise.all([1, 2].map(() => handleTattooSandboxWebhook(request(raw), { env, getStore: () => store })));
+  assert.deepEqual(replies.map(res => res.status).sort(), [200, 503]);
+  const retry = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).outcome, "confirmed_charge");
+  assert.equal([...store.documents.keys()].filter(key => key.startsWith("tattooSandboxTransactions/")).length, 1);
+  const changed = JSON.stringify({ ...charge, created_at: "2026-10-18T20:00:00Z" });
+  assert.equal((await handleTattooSandboxWebhook(request(changed), { env, getStore: () => store })).status, 503);
+});
+
+test("out-of-order unlinked notifications stay unconfirmed on identical redelivery", async () => {
+  const store = fakeStore();
+  const raw = JSON.stringify(charge);
+  const first = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal((await first.json()).outcome, "unlinked");
+  await recordSandboxCheckout({ store, input: checkout, link, locationId: "square-sandbox-loc" });
+  const again = await handleTattooSandboxWebhook(request(raw), { env, getStore: () => store });
+  assert.equal((await again.json()).outcome, "unlinked");
+  assert.equal(await store.read("tattooSandboxTransactions", journalId("charge", "payment-123")), null);
 });

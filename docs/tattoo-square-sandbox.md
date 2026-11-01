@@ -131,3 +131,40 @@ and any policy-denial reason or VPC Service Controls violation metadata. Keep
 raw request bodies, document values, credentials and tokens private. If no log
 exists, report the logging/retention gap; do not infer a missing IAM permission
 or enable logging/change policies as part of this code-only task.
+
+## Square webhook envelope compatibility
+
+Square's payment.created/payment.updated, refund.created/refund.updated and
+dispute.created/dispute.state.updated schemas do not require a top-level
+`environment`. The parser accepts its absence. If explicitly supplied, only a
+string equal to sandbox (case-insensitive) is accepted as a compatibility check;
+that untrusted value never authenticates the environment. Preview-only guards,
+Sandbox subscription HMAC key, exact configured URL, raw-body constant-time HMAC,
+isolated journal and trusted order/location/CAD amount checks remain unchanged.
+Tests use representative envelopes with merchant_id, event_id, created_at,
+data.type/id/object and dispute location_id, signed with synthetic keys and
+handled entirely in memory. No real webhook is sent.
+
+References (API version 2026-09-16):
+- https://developer.squareup.com/reference/square/payments-api/webhooks/payment.created
+- https://developer.squareup.com/reference/square/payments-api/webhooks/payment.updated
+- https://developer.squareup.com/reference/square/refunds-api/webhooks/refund.created
+- https://developer.squareup.com/reference/square/refunds-api/webhooks/refund.updated
+- https://developer.squareup.com/reference/square/disputes-api/webhooks/dispute.created
+- https://developer.squareup.com/reference/square/disputes-api/webhooks/dispute.state.updated
+
+Sequential duplicate events and payment IDs do not create extra charge records.
+Concurrent create conflicts return 503; redelivery can then read the committed
+record. Same event ID with changed raw bytes fails closed. Already recorded
+unlinked events remain unlinked on identical redelivery, even if an order is
+subsequently available. There is no automatic backfill/provider readback or
+complete refund/dispute state history; review records do not issue Studio Credit.
+
+Before any owner-approved payment test, verify the exact new READY Preview
+commit and inspect the existing Square Sandbox subscription URL against the
+configured notification URL (including hostname/path, without exposing its key).
+The subscribed hostname must serve that corrected commit; the deployment URL
+and stable branch alias are not interchangeable for HMAC. Confirm payment event
+subscriptions and reachability without changing settings. Then separately
+authorize one new low-value Sandbox test. Do not retry TAPOUT or rerun writes as
+part of code verification. Preserve the owner-verified diagnostic documents.
