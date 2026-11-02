@@ -1,5 +1,9 @@
 # Stage 2B — isolated Firestore ledger persistence
 
+Integration note: this historical Stage 2B baseline is extended only on the
+Stage 2C-2 integration branch. See [authenticated commands](authenticated-financial-commands.md)
+for guarded transfers, two-lot reconstruction and current authorization boundaries.
+
 Stacked on PR #60 at `6c45d6124bc455291e78d8248e4228e4b2a1f16c`.
 PR #61 remains a sibling: policy/offer integration is intentionally deferred.
 PR #59's Square verifier, historical EXTERNAL review exclusion, live routes,
