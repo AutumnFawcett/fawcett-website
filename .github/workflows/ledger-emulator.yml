@@ -1,0 +1,30 @@
+name: Ledger emulator verification
+on:
+  pull_request:
+    paths:
+      - 'lib/ledger/**'
+      - 'tests/ledger/**'
+      - 'tests/ledger-firestore/**'
+      - 'scripts/test-ledger-emulator.mjs'
+      - 'firebase.ledger-emulator.json'
+      - 'package*.json'
+      - '.github/workflows/ledger-emulator.yml'
+permissions:
+  contents: read
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm run test:ledger
+      - run: npm run test:ledger:emulator
