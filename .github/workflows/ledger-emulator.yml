@@ -5,6 +5,8 @@ on:
       - 'lib/ledger/**'
       - 'tests/ledger/**'
       - 'tests/ledger-firestore/**'
+      - 'tests/legacy-import/**'
+      - 'scripts/reconcile-legacy-synthetic.mjs'
       - 'scripts/test-ledger-emulator.mjs'
       - 'firebase.ledger-emulator.json'
       - 'package*.json'
@@ -29,4 +31,5 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm run test:ledger
+      - run: npm run test:legacy-import
       - run: npm run test:ledger:emulator
