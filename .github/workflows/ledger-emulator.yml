@@ -3,9 +3,15 @@ on:
   pull_request:
     paths:
       - 'lib/ledger/**'
+      - 'lib/financial-commands/**'
+      - 'lib/agreements/**'
       - 'tests/ledger/**'
       - 'tests/ledger-firestore/**'
       - 'tests/legacy-import/**'
+      - 'tests/agreements/**'
+      - 'tests/financial-commands/**'
+      - 'scripts/test-financial-commands-emulator.mjs'
+      - 'firebase.commands-emulator.json'
       - 'scripts/reconcile-legacy-synthetic.mjs'
       - 'scripts/test-ledger-emulator.mjs'
       - 'firebase.ledger-emulator.json'
@@ -31,5 +37,7 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm run test:ledger
+      - run: npm run test:contracts
       - run: npm run test:legacy-import
       - run: npm run test:ledger:emulator
+      - run: npm run test:commands:emulator
