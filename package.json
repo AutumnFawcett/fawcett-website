@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/payment-plans/*.test.mjs tests/admin-crm/*.test.mjs tests/studio-schedule/*.test.mjs tests/payments/*.test.mjs tests/ledger/*.test.mjs",
+    "test": "node --test tests/payment-plans/*.test.mjs tests/admin-crm/*.test.mjs tests/studio-schedule/*.test.mjs tests/payments/*.test.mjs tests/ledger/*.test.mjs tests/legacy-import/*.test.mjs",
     "test:browser": "playwright test",
     "test:ledger": "node --test tests/ledger/*.test.mjs",
-    "test:ledger:emulator": "node scripts/test-ledger-emulator.mjs"
+    "test:ledger:emulator": "node scripts/test-ledger-emulator.mjs",
+    "test:legacy-import": "node --test tests/legacy-import/*.test.mjs",
+    "reconcile:synthetic": "node scripts/reconcile-legacy-synthetic.mjs"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.4.0",
