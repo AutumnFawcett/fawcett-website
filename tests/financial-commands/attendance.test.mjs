@@ -151,3 +151,30 @@ test("clients cannot write completion evidence, heads, applications or audits",a
     assert.equal(response.status,403);
   }
 });
+
+test("different prepaid bookings share one verified unpaid appointment service limit",async()=>{
+  const f=await funded(deps,"shared_service",{single:true});
+  const {evidencePath}=await import("../../lib/ledger/server/firestore.mjs");
+  const request={...f.request,id:"request_2",allocations:[{id:"advance_2",kind:"tattoo_advance",amountCents:10000}],totalCents:10000};
+  const payment={...f.payment,id:"provider_2",paymentId:"payment_shared_second",orderId:"order_shared_second",requestId:request.id,amountCents:10000,evidenceId:"evidence_2"};
+  const oldRequest=(await db.doc(evidencePath(f.scope,"requests","request_1")).get()).data();
+  const batch=db.batch();
+  batch.create(db.doc(`${f.paths.agreements}/request_2`),request);
+  batch.create(db.doc(evidencePath(f.scope,"requests","request_2")),{...oldRequest,id:request.id,amountCents:10000});
+  batch.create(db.doc(evidencePath(f.scope,"payments","evidence_2")),payment);
+  batch.create(db.doc(`${f.paths.readbacks}/evidence_2`),{schemaVersion:1,paymentHash:hash(payment),sourceType:"CARD",externalDetailsPresent:false,cardStatus:"CAPTURED",
+    retrievedAt:new Date().toISOString(),verifierId:"synthetic"});
+  batch.create(db.doc(`${f.paths.providerOrders}/request_2`),{...f.scope,requestId:request.id,orderId:payment.orderId,locationId:payment.locationId,
+    merchantId:payment.merchantId,amountCents:10000,currency:"CAD"});
+  await batch.commit();
+  const receipt=await f.service.accept(f.tokens.client,f.scope,{id:"consent_2",requestId:request.id,requestHash:hash(request),policyAccepted:true,acceptedOfferTerms:[]});
+  await execute(f,operation(command("receive",{id:"receive_2",expectedRevision:1,lotId:"lot_2",purpose:"project_deposit",paymentEvidenceId:"evidence_2",requestId:request.id}),receipt.id,{agreementId:request.id}));
+  const a=await completed(deps,f,{tattooServiceCents:25000});
+  await execute(f,redeem(f,a,{expectedRevision:2,amountCents:20000}));
+  const second={...operation(command("redeem",{id:"redeem_2",expectedRevision:3,lotId:"lot_2",projectId:"project_1",appointmentId:"appointment_1",amountCents:10000,
+    purpose:"tattoo_service",creditType:"purchased"}),receipt.id,{agreementId:request.id}),attendance:a};
+  await assert.rejects(execute(f,second),/attendance_exceeds_eligible_or_service_value/);
+  await execute(f,{...second,command:{...second.command,amountCents:5000}});
+  const s=await summary(f);assert.equal(s.earnedTattooRevenueCents,25000);assert.equal(s.prepaidLiabilityCents,15000);
+  assert.equal(s.collectedPaymentsCents,40000);assert.deepEqual(balances(rebuild(f.scope,await entryList(f))),s);
+});
