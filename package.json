@@ -14,7 +14,8 @@
     "test:legacy-import": "node --test tests/legacy-import/*.test.mjs",
     "reconcile:synthetic": "node scripts/reconcile-legacy-synthetic.mjs",
     "test:contracts": "node --test tests/agreements/*.test.mjs",
-    "test:commands:emulator": "node scripts/test-financial-commands-emulator.mjs"
+    "test:commands:emulator": "node scripts/test-financial-commands-emulator.mjs",
+    "test:ownership": "node --conditions=react-server --test tests/ownership-protocol/*.test.mjs"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.4.0",
