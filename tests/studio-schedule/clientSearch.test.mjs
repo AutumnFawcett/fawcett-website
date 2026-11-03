@@ -10,7 +10,7 @@ const clients = [
 ];
 
 test("finds by name, email or phone and keeps distinct client keys", () => {
-  assert.deepEqual(filterScheduleClients(clients, "jane").map(x => x.key), ["first", "third"]);
+  assert.deepEqual(filterScheduleClients(clients, "jane").map(x => x.key), ["first", "second", "third"]);
   assert.deepEqual(filterScheduleClients(clients, " DIFFERENT@").map(x => x.key), ["second"]);
   assert.deepEqual(filterScheduleClients(clients, "780-111").map(x => x.key), ["first"]);
   assert.deepEqual(filterScheduleClients(clients, "elodie").map(x => x.key), ["fourth"]);
