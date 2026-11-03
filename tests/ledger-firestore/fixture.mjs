@@ -1,4 +1,6 @@
-import { Firestore } from "@google-cloud/firestore";
+import "../financial-commands/local-network.mjs";
+import {createLocalFinancialDependencies} from "../../lib/financial-security/runtime.mjs";
+import {sealSyntheticRecords} from "../financial-commands/security-fixture.mjs";
 import { createFirestoreLedger, evidencePath, policyPath } from "../../lib/ledger/server/firestore.mjs";
 
 export const PROJECT = "demo-fawcett-ledger";
@@ -8,7 +10,7 @@ export function emulatorDatabase() {
     || process.env.GCLOUD_PROJECT !== PROJECT || process.env.GOOGLE_CLOUD_PROJECT !== PROJECT) {
     throw Error("local_demo_emulator_required");
   }
-  return new Firestore({ projectId: PROJECT, host: "127.0.0.1:8087", ssl: false });
+  return createLocalFinancialDependencies({requireAuth:false}).db;
 }
 export const policy = { schemaVersion: 1, id: "terms", version: 1, status: "approved", currency: "CAD", depositScope: "project",
   purchasedExpiry: "never", cancellationCredit: "retain", supplyFees: "separate", promotionUse: "explicit", disputeFreeze: "remaining_funding_lot" };
@@ -35,5 +37,6 @@ export async function seed(db, scope, paymentPatch = {}, requestPatch = {}) {
   batch.set(db.doc(evidencePath(scope, "payments", "evidence_1")), payment);
   batch.set(db.doc(evidencePath(scope, "requests", "request_1")), request);
   await batch.commit();
+  await sealSyntheticRecords(db,[policyPath("sandbox","terms",1),evidencePath(scope,"payments","evidence_1"),evidencePath(scope,"requests","request_1")]);
   return payment;
 }

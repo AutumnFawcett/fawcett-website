@@ -1,3 +1,4 @@
+import {sealSyntheticRecords} from "./security-fixture.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {emulatorDependencies,funded,transferable,approve,operation,command,PROJECT} from "./fixture.mjs";
@@ -31,6 +32,7 @@ async function split(name){const f=await transferable(deps,name);await approve(f
 async function refundEvidence(f,id,amount){
   await db.doc(evidencePath(f.scope,"refunds",id)).create({schemaVersion:1,id,environment:f.scope.environment,currency:"CAD",provider:"square",
     merchantId:f.payment.merchantId,paymentId:f.payment.paymentId,amountCents:amount,status:"COMPLETED",readbackVerified:true,verificationVersion:1,evidenceId:id});
+  await sealSyntheticRecords(db,[evidencePath(f.scope,"refunds",id)]);
 }
 async function reconcile(f){
   const fs=await family(f),events=(await db.collection(`${familyPath(fs.id)}/events`).orderBy("revision").get()).docs.map(d=>d.data());
@@ -141,7 +143,7 @@ test("coordinator rollback and lost commit response preserve exact idempotent ef
 test("cross-client and cross-environment family associations fail independently of authorization",async()=>{
   const f=await split("family_isolation"),coord=createFundingFamilyCoordinator({db,authorize:async()=>({actorId:"synthetic",authorizationEvidenceId:"audit"})});
   const input={id:"freeze",type:"freeze",familyId:fundingFamilyId(f.payment),caseId:"dispute",amountCents:null,expectedFamilyRevision:2};
-  for(const scope of [{...f.scope,clientId:"other_client"},{...f.scope,environment:"production"}])await assert.rejects(coord.coordinate(scope,input,principal),/invalid_funding_family/);
+  for(const scope of [{...f.scope,clientId:"other_client"},{...f.scope,environment:"production"}])await assert.rejects(coord.coordinate(scope,input,principal),/invalid_funding_family|financial_environment_mismatch/);
   assert.equal((await family(f)).totals.availableCents,30000);
 });
 
@@ -164,7 +166,7 @@ test("membership cancellation preserves purchased family value and transferred s
 test("financial posting rollback leaves family and monetary projections unchanged",async()=>{
   const f=await transferable(deps,"family_post_rollback");await approve(f);
   const failing={doc:p=>db.doc(p),runTransaction:(callback,options)=>db.runTransaction(async tx=>{await callback(tx);throw Error("posting_rollback");},options)};
-  const service=createFinancialCommands({db:failing,auth,projectId:PROJECT});
+  const service=createFinancialCommands({db:failing,auth,projectId:PROJECT,runtime:deps.runtime});
   await assert.rejects(service.execute(f.tokens.owner,f.scope,f.op),/posting_rollback/);
   assert.equal((await family(f)).revision,1);assert.equal((await entries(f)).length,1);await reconcile(f);
 });

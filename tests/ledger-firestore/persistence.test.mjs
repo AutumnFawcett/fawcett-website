@@ -1,3 +1,4 @@
+import {sealSyntheticRecords} from "../financial-commands/security-fixture.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { rebuild, balances } from "../../lib/ledger/engine.mjs";
@@ -61,6 +62,7 @@ test("dispute and refund overlap reserve once, verified refund deducts once", as
     merchantId: "merchant_1", paymentId: `payment_${scope.clientId}`, amountCents: 5000,
     status: "COMPLETED", readbackVerified: true, verificationVersion: 1, evidenceId: "refund_evidence" };
   await db.doc(evidencePath(scope, "refunds", "refund_evidence")).create(refund);
+  await sealSyntheticRecords(db,[evidencePath(scope,"refunds","refund_evidence")]);
   const input = operation("complete_refund", { lotId: "lot_1", caseId: "refund_case", amountCents: 5000, refundEvidenceId: "refund_evidence" });
   await store.post(scope, input, principal); await store.post(scope, input, principal);
   assert.equal((await projection(scope)).summary.reservedPurchasedCents, 25000);
@@ -207,7 +209,7 @@ test("writes read bounded documents regardless of journal history length", async
   })), options) };
   await ledger(db, scope, measured).post(scope, redeem({ amountCents: 1000 }), principal);
   // Fixed reads cover attendance ownership and one funding-family coordinator.
-  assert.equal(reads, 7);
+  assert.equal(reads, 8);
   assert.equal((await journal(scope)).length, 10);
 });
 
