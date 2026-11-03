@@ -1,6 +1,6 @@
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
-import { emulatorDependencies,setup,accept,funded,transferable,approve,receive,operation,command,PROJECT } from "./fixture.mjs";
+import { emulatorDependencies,setup,accept,funded,transferable,approve,receive,operation,command,PROJECT,completed } from "./fixture.mjs";
 import { createFinancialCommands,principalPath,commandPaths,auditPath } from "../../lib/financial-commands/service.mjs";
 import { ledgerPaths,evidencePath } from "../../lib/ledger/server/firestore.mjs";
 import { hash } from "../../lib/agreements/contracts.mjs";
@@ -94,6 +94,7 @@ test("booking fee and advance stay separate; attendance applies both exactly onc
   const f=await funded(deps,"booking"),booking=(await db.doc(`${f.paths.bookings}/request_1`).get()).data();
   assert.deepEqual(booking.allocations.map(a=>[a.kind,a.amountCents]),[["appointment_booking_fee",5000],["tattoo_advance",25000]]);
   const op=operation(command("redeem",{expectedRevision:1,lotId:"lot_1",projectId:"project_1",appointmentId:"appointment_1",amountCents:30000,purpose:"tattoo_service",creditType:"purchased"}),f.receipt.id);
+  op.attendance=await completed(deps,f);
   await f.service.execute(f.tokens.admin,f.scope,op);assert.equal((await f.service.execute(f.tokens.admin,f.scope,op)).duplicate,true);
   assert.equal((await projection(f)).summary.availablePurchasedCents,0);
   assert.equal((await db.doc(`${f.paths.bookings}/request_1`).get()).data().applications.length,1);
@@ -209,6 +210,7 @@ test("test network guard rejects nonlocal sockets before any connection",async()
 test("transferred general value cannot be spent or transferred again through this increment",async()=>{
   const f=await transferable(deps,"target_locked");await approve(f);await f.service.execute(f.tokens.owner,f.scope,f.op);
   const redeem=operation(command("redeem",{expectedRevision:2,lotId:"general_1",projectId:"project_1",appointmentId:"appointment_1",amountCents:30000,purpose:"tattoo_service",creditType:"purchased"}),f.receipt.id);
+  redeem.attendance={completionId:"unused",revision:1,definitionHash:hash("unused")};
   await assert.rejects(f.service.execute(f.tokens.admin,f.scope,redeem),/transferred_value_redemption_not_enabled/);
   const next={...f.op,approvalId:"approval_2",command:{...f.op.command,id:"transfer_2",expectedRevision:2,lotId:"general_1",targetLotId:"general_2",projectId:null}};
   await assert.rejects(f.service.approveTransfer(f.tokens.owner,f.scope,{id:"approval_2",operation:next,expiresAt:new Date(Date.now()+60000).toISOString()}),/tattoo_credit_transfer_only/);

@@ -75,3 +75,17 @@ export async function transferable(deps,name){
 export async function approve(f,patch={}){
   return f.service.approveTransfer(f.tokens.owner,f.scope,{id:"approval_1",operation:f.op,expiresAt:new Date(Date.now()+60000).toISOString(),...patch});
 }
+
+// Synthetic privileged evidence provisioning only. No live producer is activated.
+export async function completed(deps,f,patch={}){
+  const completion={schemaVersion:1,id:"completion_1",...f.scope,currency:"CAD",appointmentId:"appointment_1",appointmentRevision:1,revision:1,
+    projectId:"project_1",artistId:"artist_1",status:"completed",decision:"authorized",tattooServiceCents:30000,settledTattooCents:0,
+    supplyFeeCents:15000,taxCents:0,otherCents:0,completedAt:new Date().toISOString(),authorizedAt:new Date().toISOString(),
+    actorId:`owner_${f.scope.clientId.slice(7)}`,actorRoleRevision:1,auditId:`completion_audit_${f.scope.clientId}`,...patch};
+  await deps.db.doc(principalPath(completion.actorId)).update({actions:["receive","redeem","transfer","approve_transfer","authorize_service_completion"]});
+  await deps.db.doc(`${f.paths.serviceCompletions}/${completion.id}`).create(completion);
+  await deps.db.doc(`${f.paths.serviceCompletionHeads}/appointment_1`).set({schemaVersion:1,completionId:completion.id,revision:completion.revision,definitionHash:hash(completion),status:"completed"});
+  await deps.db.doc(`financialCommandAudits/${completion.auditId}`).create({schemaVersion:1,...f.scope,action:"authorize_service_completion",
+    actorId:completion.actorId,role:"owner",roleRevision:1,recordedAt:completion.authorizedAt,payloadHash:hash(completion),payload:completion});
+  return {completionId:completion.id,revision:completion.revision,definitionHash:hash(completion)};
+}
