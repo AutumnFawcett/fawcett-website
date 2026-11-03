@@ -255,6 +255,9 @@ test("verification-only keys cannot issue or commit previously unaccepted value"
   await assert.rejects(f.writer().prepare(f.tokens.admin,f.scope,f.op),/key_not_active/);
   await assert.rejects(f.commit(p),/key_not_active/);
   await assert.rejects(rotated.writer.commit(f.tokens.admin,f.scope,f.op,p),/current_signing_key/);await untouched(f);
+  const fresh=await rotated.writer.prepare(f.tokens.admin,f.scope,f.op);
+  assert.equal(fresh.artifact.body.keyId,"ledger_key_v2");assert.equal(fresh.artifact.body.artifactId,p.artifact.body.artifactId);
+  assert.equal((await rotated.writer.commit(f.tokens.admin,f.scope,f.op,fresh)).duplicate,false);assert.equal(rotated.calls,1);
 });
 test("maximum-length operation IDs get stable scoped IDs and conflicting reuse rejects",async()=>{
   const f=await fixture("long_identity"),op={...f.op,command:{...f.op.command,id:"x".repeat(128)}},w=f.writer();
@@ -270,7 +273,9 @@ test("maximum-length operation IDs get stable scoped IDs and conflicting reuse r
   await assert.rejects(w.execute(f.tokens.admin,f.scope,{...op,command:{...op.command,amountCents:10000}}),/posting_id_collision/);
 });
 test("explicit legacy accepted artifact ID remains readable without a migration",async()=>{
-  const f=await fixture("legacy_id"),p=await f.writer().prepare(f.tokens.admin,f.scope,f.op);await f.commit(p);
+  const f=await fixture("legacy_id"),p=await f.writer().prepare(f.tokens.admin,f.scope,f.op);
+  const unaccepted=await resignFixture(f,p,{artifactId:`attendance_${f.op.command.id}`});
+  await assert.rejects(f.commit(unaccepted),/current_signing_key_or_id_required/);await untouched(f);await f.commit(p);
   // Disposable backward-compatibility fixture, not a migration/re-signing path.
   const legacy=await resignFixture(f,p,{artifactId:`attendance_${f.op.command.id}`});await replaceSyntheticAnchor(f,legacy);
   const before=(await db.doc(signedAttendancePath(f.scope,f.op.command.id)).get()).data();
