@@ -206,7 +206,8 @@ test("writes read bounded documents regardless of journal history length", async
     },
   })), options) };
   await ledger(db, scope, measured).post(scope, redeem({ amountCents: 1000 }), principal);
-  assert.equal(reads, 5);
+  // One fixed extra read rejects bypasses of command-owned attendance lots.
+  assert.equal(reads, 6);
   assert.equal((await journal(scope)).length, 10);
 });
 
