@@ -142,3 +142,11 @@ test("authenticated family coordination preserves holds and requires owner scope
   await assert.rejects(f.service.coordinateFamily(f.tokens.admin,f.scope,{...input,id:"release",type:"release_dispute",expectedFamilyRevision:3}),/authorization_required/);
   const audit=(await db.doc(auditPath(f.scope,"family_freeze","freeze")).get()).data();assert.equal(audit.actorId,"owner_security_family");
 });
+
+test("tampered replay metadata cannot borrow authenticity from an unchanged signed journal",async()=>{
+  const f=await setup(deps,"security_replay"),receipt=await accept(f),op=receive(receipt);
+  await f.service.execute(f.tokens.admin,f.scope,op);
+  await db.doc(`${ledgerPaths(f.scope).operations}/${op.command.id}`).update({authorizationEvidenceId:"forged_authority"});
+  await assert.rejects(f.service.execute(f.tokens.admin,f.scope,op),/journal_ownership_required/);
+  assert.equal(await count(f),1);
+});

@@ -51,9 +51,9 @@ A matching hash, ID or `verified` flag is insufficient. Protected reads require 
 | Booking/project/appointment/request authority | Reserved booking authority; synthetic fixtures only |
 | Completion records and current completion heads | Reserved authenticated completion-authorizer; synthetic fixtures only |
 | Consent receipts/replay records, owner approvals and command audits | Protected command service |
-| Immutable financial journals | Isolated ledger writer after all transaction guards |
+| Immutable financial journals and financial/family replay records | Isolated ledger writer after all transaction guards |
 
-Command writers cannot sign provider evidence or role-management audits. Role writers cannot claim command-audit ownership. Provider/payment semantics and existing CARD/readback/order/value checks still apply even to an owned record. Completion identity/price/revision controls remain unchanged. Original funding journals and journal replays/reversals now verify ownership as well.
+Command writers cannot sign provider evidence or role-management audits. Role writers cannot claim command-audit ownership. Provider/payment semantics and existing CARD/readback/order/value checks still apply even to an owned record. Completion identity/price/revision controls remain unchanged. Original funding journals, financial/family replay metadata and journal replays/reversals now verify ownership as well. A valid journal signature cannot authenticate a tampered operation acknowledgment.
 
 **Keys are ephemeral emulator-only test authority, generated in memory and never logged/exported as private material.** No secret is deployed. They deliberately do not support persistent or multi-instance deployments: a new process must explicitly seed disposable fixtures under its own issuer. Real verification consumers must have only approved public verifier keys; private provider keys must belong to a separately protected verifier writer (for example a reviewed KMS-backed service), not a generic command instance. Durable registry, key rotation/retention and workload identity remain unimplemented deployment gates. Local ownership receipts are not a substitute for IAM or tamper-resistant audit retention.
 
