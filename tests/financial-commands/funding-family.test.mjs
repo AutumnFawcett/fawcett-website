@@ -112,7 +112,10 @@ test("insufficient consumed family funds yield durable review, not fabricated re
   assert.equal(result.outcome,"review_required");assert.equal((await projection({scope})).summary.prepaidLiabilityCents,10000);
   const freeze=await coord.coordinate(scope,{id:"freeze",type:"freeze",familyId:fundingFamilyId(payment),caseId:"dispute",amountCents:null,expectedFamilyRevision:2},principal);
   assert.equal(freeze.outcome,"review_required");assert.equal((await family({scope,payment})).totals.disputedCents,10000);
-  await reconcile({scope,payment});
+  const f={scope,payment};await refundEvidence(f,"consumed_refund",20000);
+  const review=await store.post(scope,financial("complete_refund",{lotId:"lot_1",caseId:"missing_reservation",amountCents:20000,refundEvidenceId:"consumed_refund"}),principal);
+  assert.equal(review.outcome,"review_required");assert.equal(review.review.reason,"family_refund_reservation_requires_review");
+  await reconcile(f);
 });
 
 test("stale revisions, duplicate reservations and revoked authorizers fail closed",async()=>{

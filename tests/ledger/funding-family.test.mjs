@@ -12,10 +12,10 @@ function fixture(){
     const original=command.type==="reverse"?state.entries.find(e=>e.id===command.originalId):null;
     const result=post(state,{actorId:"trusted",recordedAt:"2026-11-03T00:00:00.000Z",...command},policy);
     const next=coordinatePosting(family,result.entry,"audit",original);
-    events.push({schemaVersion:1,kind:"posting",entry:result.entry,original,authorizationEvidenceId:"audit",beforeHash:familyHash(family),afterHash:familyHash(next)});
+    events.push({schemaVersion:1,kind:"posting",revision:next.revision,entry:result.entry,original,authorizationEvidenceId:"audit",beforeHash:familyHash(family),afterHash:familyHash(next)});
     state=result.state;family=next;return result.entry;
   };
-  const risk=command=>{const result=coordinateRisk(family,scope,command,"audit");if(result.family){events.push({schemaVersion:1,kind:"risk",command,authorizationEvidenceId:"audit",beforeHash:familyHash(family),afterHash:familyHash(result.family)});family=result.family;}return result;};
+  const risk=command=>{const result=coordinateRisk(family,scope,command,"audit");if(result.family){events.push({schemaVersion:1,kind:"risk",revision:result.family.revision,command,authorizationEvidenceId:"audit",beforeHash:familyHash(family),afterHash:familyHash(result.family)});family=result.family;}return result;};
   apply({id:"receipt",type:"receive",lotId:"root",purpose:"project_deposit",payment,request});
   return {apply,risk,get state(){return state;},get family(){return family;},events};
 }
@@ -70,4 +70,10 @@ test("bounded family/case limits and cross-scope reconciliation fail closed",()=
   assert.throws(()=>coordinateRisk(f.family,{...scope,clientId:"other"},{type:"freeze",caseId:"a"},"audit"),/invalid_funding_family/);
   assert.throws(()=>protectedBalances(f.state,[]),/missing_funding_family/);
   const changed=structuredClone(f.events);changed[0].afterHash=familyHash("tampered");assert.throws(()=>rebuildFundingFamily(scope,changed),/family_reconstruction_mismatch/);
+});
+
+test("descendant member limit fails closed rather than truncating provenance",()=>{
+  const f=fixture();for(let i=0;i<FAMILY_LIMITS.members-1;i++)f.apply(transfer(`move_${i}`,`child_${i}`,1));
+  assert.throws(()=>f.apply(transfer("overflow","extra_child",1)),/funding_family_limit/);
+  assert.equal(Object.keys(f.family.members).length,FAMILY_LIMITS.members);
 });
