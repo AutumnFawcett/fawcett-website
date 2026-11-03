@@ -11,6 +11,7 @@ on:
       - 'tests/legacy-import/**'
       - 'tests/agreements/**'
       - 'tests/financial-commands/**'
+      - 'tests/ownership-protocol/**'
       - 'scripts/test-financial-commands-emulator.mjs'
       - 'firebase.commands-emulator.json'
       - 'scripts/reconcile-legacy-synthetic.mjs'
@@ -37,13 +38,14 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: npm ci
+      - run: npm run test:ownership
       - run: npm run test:ledger
       - run: npm run test:contracts
       - run: npm run test:legacy-import
       - run: npm run test:ledger:emulator
       - run: npm run test:commands:emulator
       - name: Scoped financial ESLint
-        run: npx eslint lib/financial-security/*.mjs lib/financial-commands/*.mjs lib/ledger/server/*.mjs lib/ledger/funding-family.mjs tests/ledger/funding-family.test.mjs tests/ledger-firestore/persistence.test.mjs tests/financial-commands/*.mjs tests/agreements/serviceCompletion.test.mjs tests/agreements/financialArchitecture.test.mjs
+        run: npx eslint lib/financial-security/protocol/*.mjs tests/ownership-protocol/*.mjs lib/financial-security/*.mjs lib/financial-commands/*.mjs lib/ledger/server/*.mjs lib/ledger/funding-family.mjs tests/ledger/funding-family.test.mjs tests/ledger-firestore/persistence.test.mjs tests/financial-commands/*.mjs tests/agreements/serviceCompletion.test.mjs tests/agreements/financialArchitecture.test.mjs
       - name: Production build (synthetic public Firebase configuration only)
         run: npm run build
         env:
