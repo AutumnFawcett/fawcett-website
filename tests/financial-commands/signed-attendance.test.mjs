@@ -32,7 +32,7 @@ async function fixture(name,{mixed=false,price=20000}={}){
   const signing=async bytes=>{assert.equal(txDepth,0,"signing inside transaction callback");signCalls++;return sign(null,bytes,keys.privateKey).toString("base64");};
   const writer=(patch={})=>createSignedAttendanceCommands({db:observedDb,auth,projectId,runtime,registryAuthority:authority,keyId:"ledger_key",issuerId:"ledger_issuer",signBytes:signing,...patch});
   const op={...operation(command("redeem",{expectedRevision:1,lotId:"lot_1",projectId:"project_1",appointmentId:"appointment_1",amountCents:Math.min(price,30000),purpose:"tattoo_service",creditType:"purchased"}),f.receipt.id),attendance};
-  const paths=ledgerPaths(f.scope),familyRef=db.doc(`financialFundingFamilies/${fundingFamilyId(f.payment)}`);
+  const paths={...f.paths,...ledgerPaths(f.scope)},familyRef=db.doc(`financialFundingFamilies/${fundingFamilyId(f.payment)}`);
   const summary=async()=>(await db.doc(paths.account).get()).data().summary;
   const entries=async()=>(await db.collection(paths.journal).get()).docs.map(d=>d.data()).sort((a,b)=>a.sequence-b.sequence);
   const publish=async change=>{const row=(await db.doc(registryPaths(registryId).current).get()).data(),next=structuredClone(row.definition);next.revision++;change(next);
