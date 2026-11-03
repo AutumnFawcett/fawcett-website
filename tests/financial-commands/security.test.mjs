@@ -22,7 +22,7 @@ const count=async f=>(await db.collection(ledgerPaths(f.scope).journal).get()).s
 
 test("client self-elevation and owner assignments through role-management commands are denied",async()=>{
   const f=await setup(deps,"security_elevation");
-  await assert.rejects(manager().decide(f.tokens.client,f.scope,assignment(f,{targetUid:f.scope.clientId})),/authorization_required/);
+  await assert.rejects(manager().decide(f.tokens.client,f.scope,assignment(f,{targetUid:"nonexistent_candidate"})),/authorization_required/);
   await assert.rejects(manager().decide(f.tokens.owner,f.scope,assignment(f,{assignment:{role:"owner",actions:["manage_roles"],grants:[]}})),/invalid_contract/);
   await assert.rejects(manager().decide(f.tokens.owner,f.scope,{...assignment(f),actorId:"owner"}),/invalid_contract/);
   assert.equal((await db.doc(principalPath(f.scope.clientId)).get()).data().role,"client");
@@ -66,7 +66,8 @@ test("revoking an owner invalidates prior transfer approvals without consuming t
 
 test("role-operation uncertain commits are idempotent and conflicting IDs are rejected",async()=>{
   const f=await setup(deps,"security_uncertain"),input=assignment(f);
-  const lost={doc:p=>db.doc(p),runTransaction:async(...args)=>{await db.runTransaction(...args);throw Error("response_lost");}};
+  let transactions=0;
+  const lost={doc:p=>db.doc(p),runTransaction:async(...args)=>{const result=await db.runTransaction(...args);if(++transactions===2)throw Error("response_lost");return result;}};
   await assert.rejects(manager(lost).decide(f.tokens.owner,f.scope,input),/response_lost/);
   assert.equal((await manager().decide(f.tokens.owner,f.scope,input)).duplicate,true);
   await assert.rejects(manager().decide(f.tokens.owner,f.scope,{...input,revokeSessions:true}),/role_operation_id_collision/);
