@@ -1,3 +1,4 @@
+import {sealSyntheticRecords} from "./security-fixture.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import { emulatorDependencies,setup,accept,funded,transferable,approve,receive,operation,command,PROJECT,completed } from "./fixture.mjs";
@@ -31,14 +32,14 @@ test("disabled, revoked and expired authorization is rejected without a journal"
   // Let auth_time's second pass so Firebase's revocation boundary is unambiguous.
   await new Promise(resolve=>setTimeout(resolve,1100));await auth.revokeRefreshTokens("admin_revoked");
   await assert.rejects(f.service.execute(f.tokens.admin,f.scope,op),/authentication_required/);
-  const expired=createFinancialCommands({db,auth,projectId:PROJECT,clock:()=>Date.now()+3700000});
+  const expired=createFinancialCommands({db,auth,projectId:PROJECT,runtime:deps.runtime,clock:()=>Date.now()+3700000});
   await assert.rejects(expired.execute(f.tokens.owner,f.scope,op),/authentication_required/);
   assert.equal(await projection(f),undefined);
 });
 
 test("current application role, project scope and revocation epoch are checked transactionally",async()=>{
   const f=await setup(deps,"scope"),receipt=await accept(f),op=receive(receipt),ref=db.doc(principalPath("admin_scope"));
-  await ref.update({projectIds:[]});await assert.rejects(f.service.execute(f.tokens.admin,f.scope,op),/project_authorization/);
+  await ref.update({projectIds:[]});await sealSyntheticRecords(db,[ref.path]);await assert.rejects(f.service.execute(f.tokens.admin,f.scope,op),/project_authorization/);
   await ref.update({projectIds:["project_1"],validAfterSeconds:Math.floor(Date.now()/1000)+10});
   await assert.rejects(f.service.execute(f.tokens.admin,f.scope,op),/authorization_required/);
   await ref.update({validAfterSeconds:0,active:false});await assert.rejects(f.service.execute(f.tokens.admin,f.scope,op),/authorization_required/);
@@ -62,14 +63,14 @@ test("stale itemized amount/request revision and appointment revision invalidate
     const f=await setup(deps,`stale_${variant}`),receipt=await accept(f);
     if(variant==="appointment")await db.doc(`${f.paths.appointments}/appointment_1`).update({revision:2});
     else {const changed=structuredClone(f.request);if(variant==="request")changed.revision=2;else{changed.totalCents++;changed.allocations[0].amountCents++;}await db.doc(`${f.paths.agreements}/request_1`).set(changed);}
-    await assert.rejects(f.service.execute(f.tokens.admin,f.scope,receive(receipt)),/stale_or_invalid_acceptance|stale_appointment|trusted_acceptance_required/);
+    await assert.rejects(f.service.execute(f.tokens.admin,f.scope,receive(receipt)),/stale_or_invalid_acceptance|stale_appointment|trusted_acceptance_required|booking_ownership_required/);
     assert.equal(await projection(f),undefined);
   }
 });
 
 test("separate exact offer terms and server timestamp are retained in acceptance",async()=>{
   const f=await setup(deps,"offers"),request={...f.request,requiredOfferTerms:[{id:"offer_1",version:1,contentHash:hash("synthetic offer")}]};
-  await db.doc(`${f.paths.agreements}/request_1`).set(request);f.request=request;
+  await db.doc(`${f.paths.agreements}/request_1`).set(request);await sealSyntheticRecords(db,[`${f.paths.agreements}/request_1`]);f.request=request;
   await assert.rejects(f.service.accept(f.tokens.client,f.scope,{id:"a",requestId:request.id,requestHash:hash(request),policyAccepted:true,acceptedOfferTerms:[]}),/offer_acceptance_required/);
   const receipt=await accept(f);assert.deepEqual(receipt.acceptedOfferTerms,request.requiredOfferTerms);assert.ok(Date.parse(receipt.acceptedAt)<=Date.now());
   const replay=await accept(f);assert.deepEqual(replay,receipt);
@@ -85,7 +86,7 @@ test("provider evidence must exist, be consistent CARD capture and match trusted
     if(variant==="order")await db.doc(`${f.paths.providerOrders}/request_1`).update({orderId:"wrong_order"});
     if(variant==="failed"){const payment={...f.payment,status:"FAILED"};await db.doc(evidencePath(f.scope,"payments","evidence_1")).set(payment);await db.doc(`${f.paths.readbacks}/evidence_1`).update({paymentHash:hash(payment)});}
     if(variant==="forged")await db.doc(evidencePath(f.scope,"payments","evidence_1")).update({amountCents:100});
-    await assert.rejects(f.service.execute(f.tokens.admin,f.scope,receive(receipt)),/trusted_provider_readback_required|provider_order_mismatch|verified_receipt_required/);
+    await assert.rejects(f.service.execute(f.tokens.admin,f.scope,receive(receipt)),/trusted_provider_readback_required|provider_order_mismatch|verified_receipt_required|provider_ownership_required/);
     assert.equal(await projection(f),undefined);
   }
 });
@@ -126,7 +127,7 @@ test("approval binds exact amount, restriction, role revision and account revisi
     const f=await transferable(deps,`approval_${variant}`);await approve(f);let op=f.op;
     if(variant==="amount")op={...op,command:{...op.command,amountCents:9000}};
     if(variant==="restriction"){const ref=db.doc(`${f.paths.values}/lot_1`),v=(await ref.get()).data();v.credit.artistId="another_artist";await ref.set(v);}
-    if(variant==="role")await db.doc(principalPath(`owner_approval_${variant}`)).update({revision:2});
+    if(variant==="role"){await db.doc(principalPath(`owner_approval_${variant}`)).update({revision:2});await sealSyntheticRecords(db,[principalPath(`owner_approval_${variant}`)]);}
     if(variant==="revision")await db.doc(ledgerPaths(f.scope).account).update({revision:2});
     await assert.rejects(f.service.execute(f.tokens.owner,f.scope,op),/invalid_or_stale_owner_approval|stale_revision/);
     assert.equal((await db.collection(f.paths.approvalUses).get()).size,0);
@@ -136,7 +137,7 @@ test("approval binds exact amount, restriction, role revision and account revisi
 test("lost commit response retries without duplicate journal/audit/approval consumption",async()=>{
   const f=await transferable(deps,"uncertain");await approve(f);
   const interrupted={doc:path=>db.doc(path),runTransaction:async(...args)=>{await db.runTransaction(...args);throw Error("synthetic_response_lost");}};
-  const service=createFinancialCommands({db:interrupted,auth,projectId:PROJECT});
+  const service=createFinancialCommands({db:interrupted,auth,projectId:PROJECT,runtime:deps.runtime});
   await assert.rejects(service.execute(f.tokens.owner,f.scope,f.op),/synthetic_response_lost/);
   assert.equal((await f.service.execute(f.tokens.owner,f.scope,f.op)).duplicate,true);assert.equal((await entries(f)).length,2);
   assert.equal((await db.collection(f.paths.approvalUses).get()).size,1);
@@ -170,7 +171,7 @@ test("fixtures and emulator auth cannot select a real Firebase project",()=>{
 
 test("expired owner approval and forged role/approval document writes are rejected",async()=>{
   const f=await transferable(deps,"expiry");await approve(f);
-  const later=createFinancialCommands({db,auth,projectId:PROJECT,clock:()=>Date.now()+61000});
+  const later=createFinancialCommands({db,auth,projectId:PROJECT,runtime:deps.runtime,clock:()=>Date.now()+61000});
   await assert.rejects(later.execute(f.tokens.owner,f.scope,f.op),/invalid_or_stale_owner_approval/);
   for(const path of [principalPath(f.scope.clientId),`${f.paths.approvals}/forged`]){
     const response=await fetch(`http://127.0.0.1:8087/v1/projects/${PROJECT}/databases/(default)/documents/${path}`,{
@@ -189,7 +190,7 @@ test("transaction retry observes role revocation and commits no financial or app
     if(attempts===1)throw Object.assign(Error("synthetic_aborted"),{code:10});
     return result;
   },options)};
-  const service=createFinancialCommands({db:retrying,auth,projectId:PROJECT});
+  const service=createFinancialCommands({db:retrying,auth,projectId:PROJECT,runtime:deps.runtime});
   await assert.rejects(service.execute(f.tokens.owner,f.scope,f.op),/authorization_required/);
   assert.equal(attempts,2);assert.equal((await entries(f)).length,1);assert.equal((await db.collection(f.paths.approvalUses).get()).size,0);
 });
@@ -198,7 +199,7 @@ test("receipt retries require current project access and different IDs cannot re
   const f=await funded(deps,"receipt_retry"),op=receive(f.receipt);
   assert.equal((await f.service.execute(f.tokens.admin,f.scope,op)).duplicate,true);
   await assert.rejects(f.service.execute(f.tokens.admin,f.scope,receive(f.receipt,{id:"repeat_receipt",expectedRevision:1,lotId:"lot_2"})),/duplicate_provider_source/);
-  await db.doc(principalPath("admin_receipt_retry")).update({projectIds:[]});
+  await db.doc(principalPath("admin_receipt_retry")).update({projectIds:[]});await sealSyntheticRecords(db,[principalPath("admin_receipt_retry")]);
   await assert.rejects(f.service.execute(f.tokens.admin,f.scope,op),/project_authorization_required/);
   assert.equal((await entries(f)).length,1);
 });

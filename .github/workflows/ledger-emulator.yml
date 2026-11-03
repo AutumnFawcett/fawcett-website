@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'lib/ledger/**'
+      - 'lib/financial-security/**'
       - 'lib/financial-commands/**'
       - 'lib/agreements/**'
       - 'tests/ledger/**'
@@ -42,7 +43,7 @@ jobs:
       - run: npm run test:ledger:emulator
       - run: npm run test:commands:emulator
       - name: Scoped financial ESLint
-        run: npx eslint lib/financial-commands/*.mjs lib/ledger/server/*.mjs lib/ledger/funding-family.mjs tests/ledger/funding-family.test.mjs tests/ledger-firestore/persistence.test.mjs tests/financial-commands/*.mjs tests/agreements/serviceCompletion.test.mjs
+        run: npx eslint lib/financial-security/*.mjs lib/financial-commands/*.mjs lib/ledger/server/*.mjs lib/ledger/funding-family.mjs tests/ledger/funding-family.test.mjs tests/ledger-firestore/persistence.test.mjs tests/financial-commands/*.mjs tests/agreements/serviceCompletion.test.mjs tests/agreements/financialArchitecture.test.mjs
       - name: Production build (synthetic public Firebase configuration only)
         run: npm run build
         env:

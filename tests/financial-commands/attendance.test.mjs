@@ -1,3 +1,4 @@
+import {sealSyntheticRecords} from "./security-fixture.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {emulatorDependencies,funded,completed,operation,command,PROJECT} from "./fixture.mjs";
@@ -103,7 +104,7 @@ test("duplicates, uncertain commits and concurrent attempts have one financial e
   assert.equal((await db.collection(f.paths.serviceApplications).get()).size,1);assert.equal((await entryList(f)).length,2);
   const lost=await funded(deps,"attendance_lost",{single:true}),la=await completed(deps,lost),lop=redeem(lost,la);
   const interrupted={doc:p=>db.doc(p),runTransaction:async(...args)=>{await db.runTransaction(...args);throw Error("response_lost");}};
-  await assert.rejects(createFinancialCommands({db:interrupted,auth,projectId:PROJECT}).execute(lost.tokens.admin,lost.scope,lop),/response_lost/);
+  await assert.rejects(createFinancialCommands({db:interrupted,auth,projectId:PROJECT,runtime:deps.runtime}).execute(lost.tokens.admin,lost.scope,lop),/response_lost/);
   assert.equal((await execute(lost,lop)).duplicate,true);assert.equal((await entryList(lost)).length,2);
 });
 
@@ -118,7 +119,7 @@ test("different concurrent operation IDs cannot double apply one booking",async(
 test("failed transaction rolls back journal, booking, balance and application together",async()=>{
   const f=await funded(deps,"attendance_rollback",{single:true}),a=await completed(deps,f),op=redeem(f,a),before=await summary(f);
   const failing={doc:p=>db.doc(p),runTransaction:(callback,options)=>db.runTransaction(async tx=>{await callback(tx);throw Error("synthetic_failure");},options)};
-  await assert.rejects(createFinancialCommands({db:failing,auth,projectId:PROJECT}).execute(f.tokens.admin,f.scope,op),/synthetic_failure/);
+  await assert.rejects(createFinancialCommands({db:failing,auth,projectId:PROJECT,runtime:deps.runtime}).execute(f.tokens.admin,f.scope,op),/synthetic_failure/);
   assert.deepEqual(await summary(f),before);assert.equal((await entryList(f)).length,1);
   assert.equal((await db.collection(f.paths.serviceApplications).get()).size,0);assert.equal((await db.collection(f.paths.serviceBalances).get()).size,0);
   await execute(f,op);assert.equal((await summary(f)).earnedTattooRevenueCents,30000);
@@ -130,7 +131,7 @@ test("retry re-reads service revision; changed evidence cannot post",async()=>{
     attempts++;if(attempts===2)await db.doc(`${f.paths.serviceCompletionHeads}/appointment_1`).update({revision:2});
     const result=await callback(tx);if(attempts===1)throw Object.assign(Error("aborted"),{code:10});return result;
   },options)};
-  await assert.rejects(createFinancialCommands({db:retrying,auth,projectId:PROJECT}).execute(f.tokens.admin,f.scope,op),/stale_service_completion/);
+  await assert.rejects(createFinancialCommands({db:retrying,auth,projectId:PROJECT,runtime:deps.runtime}).execute(f.tokens.admin,f.scope,op),/stale_service_completion/);
   assert.equal(attempts,2);assert.equal((await entryList(f)).length,1);
 });
 
@@ -166,7 +167,7 @@ test("different prepaid bookings share one verified unpaid appointment service l
     retrievedAt:new Date().toISOString(),verifierId:"synthetic"});
   batch.create(db.doc(`${f.paths.providerOrders}/request_2`),{...f.scope,requestId:request.id,orderId:payment.orderId,locationId:payment.locationId,
     merchantId:payment.merchantId,amountCents:10000,currency:"CAD"});
-  await batch.commit();
+  await batch.commit();await sealSyntheticRecords(db,[`${f.paths.agreements}/request_2`,evidencePath(f.scope,"requests","request_2"),evidencePath(f.scope,"payments","evidence_2"),`${f.paths.readbacks}/evidence_2`,`${f.paths.providerOrders}/request_2`]);
   const receipt=await f.service.accept(f.tokens.client,f.scope,{id:"consent_2",requestId:request.id,requestHash:hash(request),policyAccepted:true,acceptedOfferTerms:[]});
   await execute(f,operation(command("receive",{id:"receive_2",expectedRevision:1,lotId:"lot_2",purpose:"project_deposit",paymentEvidenceId:"evidence_2",requestId:request.id}),receipt.id,{agreementId:request.id}));
   const a=await completed(deps,f,{tattooServiceCents:25000});
