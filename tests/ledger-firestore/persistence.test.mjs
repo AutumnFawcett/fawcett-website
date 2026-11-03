@@ -11,7 +11,7 @@ async function funded(name) {
   const scope = scopeFor(name); await seed(db, scope); const store = ledger(db, scope);
   await store.post(scope, receive(), principal); return { scope, store };
 }
-const successes = results => results.filter(r => r.status === "fulfilled").length;
+const successes = results => results.filter(r => r.status === "fulfilled" && r.value.outcome !== "review_required").length;
 
 test("simultaneous redemptions cannot overspend a shared account", async () => {
   const { scope, store } = await funded("concurrent");
@@ -206,8 +206,8 @@ test("writes read bounded documents regardless of journal history length", async
     },
   })), options) };
   await ledger(db, scope, measured).post(scope, redeem({ amountCents: 1000 }), principal);
-  // One fixed extra read rejects bypasses of command-owned attendance lots.
-  assert.equal(reads, 6);
+  // Fixed reads cover attendance ownership and one funding-family coordinator.
+  assert.equal(reads, 7);
   assert.equal((await journal(scope)).length, 10);
 });
 
